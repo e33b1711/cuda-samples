@@ -1,74 +1,144 @@
-/* Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *  * Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- *  * Neither the name of NVIDIA CORPORATION nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
- * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-// System includes
-#include <assert.h>
 #include <stdio.h>
+#include <iostream>
+#include <cassert>
+using namespace std;
 
-// CUDA runtime
+// For the CUDA runtime routines (prefixed with "cuda_")
 #include <cuda_runtime.h>
-
-// helper functions and utilities to work with CUDA
 #include <helper_cuda.h>
-#include <helper_functions.h>
 
-#ifndef MAX
-#define MAX(a, b) (a > b ? a : b)
-#endif
 
-__global__ void testKernel(int val)
-{
-    printf("[%d, %d]:\t\tValue is:%d\n",
-           blockIdx.y * gridDim.x + blockIdx.x,
-           threadIdx.z * blockDim.x * blockDim.y + threadIdx.y * blockDim.x + threadIdx.x,
-           val);
+#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+
+inline void gpuAssert(cudaError_t code, const string file, int line, bool abort = true){
+    if (code != cudaSuccess){
+        cerr <<  "GPUassert: " << cudaGetErrorString(code) << " " << file << " " << line << endl;
+        if (abort) exit(code);
+    }
 }
 
-int main(int argc, char **argv)
+__global__ void array_sum_gpu(const int* a, const int* b, const int* c, int* result, const int num_elements)
 {
-    int            devID;
-    cudaDeviceProp props;
+    int block_size = blockDim.x * blockDim.y * blockDim.z;
+    int thread_in_block = threadIdx.x + blockDim.x * threadIdx.y + blockDim.x * blockDim.y * threadIdx.z;
+    int block_num = blockIdx.x + gridDim.x * blockIdx.y + gridDim.x * gridDim.y * blockIdx.z;
+    int gid = block_num * block_size + thread_in_block;
 
-    // This will pick the best possible CUDA capable device
-    devID = findCudaDevice(argc, (const char **)argv);
+    //printf(" array_sum_gpu, gid: %d \n", gid);
+    if (gid < num_elements){
+        result[gid] = a[gid] + b[gid] + c[gid];
+    }
+}
 
-    // Get GPU information
-    checkCudaErrors(cudaGetDevice(&devID));
-    checkCudaErrors(cudaGetDeviceProperties(&props, devID));
-    printf("Device %d: \"%s\" with Compute capability %d.%d\n", devID, props.name, props.major, props.minor);
+ void array_sum_cpu(const int* a, const int* b, const int* c, int* result, const int num_elements){
+    for (int gid = 0; gid < num_elements; gid++) {
+       result[gid] = a[gid] + b[gid] + c[gid];
+    }
+ }
 
-    printf("printf() is called. Output:\n\n");
+bool compare_result(const int* a, const int* b, const int num_elements){
+    for (int gid = 0; gid < num_elements; gid++) {
+       if (a[gid] != b[gid]) return false;
+    }
+    return true;
+ }
 
-    // Kernel configuration, where a two-dimensional grid and
-    // three-dimensional blocks are configured.
-    dim3 dimGrid(2, 2);
-    dim3 dimBlock(2, 2, 2);
-    testKernel<<<dimGrid, dimBlock>>>(10);
-    cudaDeviceSynchronize();
+/**
+ * Host main routine
+ */
+int main(void)
+{
+
+    //constants
+    const int num_bs = 6;
+    const int block_sizes[num_bs] = {64, 64, 64, 128, 256, 512};
+
+
+    //time stuff
+    clock_t start, stop;
+    double calc_cpu, host2gpu, gpu2host;
+    double calc_gpu;
+
+
+    //initalizing input data
+    int num_elements = 1<<22;
+    cout << "Number of alements: " << num_elements << endl;
+    int *h_a = (int *)malloc(num_elements*sizeof(int));
+    int *h_b = (int *)malloc(num_elements*sizeof(int));
+    int *h_c = (int *)malloc(num_elements*sizeof(int));
+    int *h_result_cpu = (int *)malloc(num_elements*sizeof(int));
+    int *h_result_gpu = (int *)malloc(num_elements*sizeof(int));
+
+    for (int i = 0; i < num_elements; i++) {
+        h_a[i] = rand() / (int)RAND_MAX;
+        h_b[i] = rand() / (int)RAND_MAX;
+        h_c[i] = rand() / (int)RAND_MAX;
+    }
+
+
+    //alloc gpu mem
+    int *d_a = NULL;
+    int *d_b = NULL;
+    int *d_c = NULL;
+    int *d_result = NULL;
+    gpuErrchk(cudaMalloc((void **)&d_a, num_elements*sizeof(int)));
+    gpuErrchk(cudaMalloc((void **)&d_b, num_elements*sizeof(int)));
+    gpuErrchk(cudaMalloc((void **)&d_c, num_elements*sizeof(int)));
+    gpuErrchk(cudaMalloc((void **)&d_result, num_elements*sizeof(int)));
+
+
+    //copy to gpu
+    start = clock();
+    gpuErrchk(cudaMemcpy(d_a, h_a, num_elements*sizeof(int), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpy(d_b, h_b, num_elements*sizeof(int), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpy(d_c, h_c, num_elements*sizeof(int), cudaMemcpyHostToDevice));
+    stop = clock();
+    host2gpu = (double)(stop - start) / CLOCKS_PER_SEC;
+
+
+    //run cpu reference
+    start = clock();
+    array_sum_cpu(h_a, h_b, h_c, h_result_cpu, num_elements);
+    stop = clock();
+    calc_cpu = (double)(stop - start) / CLOCKS_PER_SEC;
+
+
+    //print cpu ref
+    cout << "CPU               : " << calc_cpu << endl;
+
+
+    //loop over block sizes
+    for(int i_bs = 0; i_bs < num_bs; i_bs++){
+
+        //loop parameter
+        int block_size = block_sizes[i_bs];
+        int grid_size = (num_elements / block_size) +1;
+        dim3 dimGrid(grid_size, 1, 1);
+        dim3 dimBlock(block_size, 1, 1);
+        cout << "Grid size: " << grid_size << " block size: " << block_size << endl;
+
+        //execute kernel
+        start = clock();
+        array_sum_gpu<<<dimGrid, dimBlock>>>(d_a, d_b, d_c, d_result, num_elements);
+        gpuErrchk(cudaDeviceSynchronize());
+        stop = clock();
+        calc_gpu = (double)(stop - start) / CLOCKS_PER_SEC;
+
+        //device to host copy
+        start = clock();
+        gpuErrchk(cudaMemcpy(h_result_gpu, d_result, num_elements*sizeof(int), cudaMemcpyDeviceToHost));
+        stop = clock();
+        gpu2host = (double)(stop - start) / CLOCKS_PER_SEC;;
+
+        //validate result
+        assert(compare_result(h_result_gpu, h_result_cpu, num_elements) && "Result did not validate!");
+
+
+        //print
+        cout << "GPU:                " <<  (calc_gpu + gpu2host + host2gpu) << endl;
+        cout << "GPU (calc only):    " <<  calc_gpu << endl;
+
+    }
 
     return EXIT_SUCCESS;
 }
