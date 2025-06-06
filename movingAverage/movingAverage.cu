@@ -46,7 +46,7 @@ __global__ void mean_gpu(const float* x, float* xmean, const int buffer_len, con
 
     //i=0
     float mean = 0.0;
-    int i = 0;
+    int i = start;
     for (int offset = 0; offset<num_threads; offset++){
         int index = (i+buffer_len-offset) % buffer_len;
         mean += x[index];
@@ -55,7 +55,7 @@ __global__ void mean_gpu(const float* x, float* xmean, const int buffer_len, con
 
 
     for (int i = start+1; i < start + partial_buffer_len; i++) {
-        int index = (i+buffer_len-num_threads+1) % buffer_len;
+        int index = (i+buffer_len-num_threads) % buffer_len;
         mean += x[i];
         mean -= x[index];
         xmean[i] = mean;
@@ -128,9 +128,13 @@ int main(void)
 {
 
     // parameters
-    const int average_len = 2<<10;
-    const int buffer_len = 2<<20;
-    const int num_threads = 1024;
+    //const int average_len = 2<<10;
+    //const int buffer_len = 2<<20;
+    //const int num_threads = 1024;
+
+    const int average_len = 64;
+    const int buffer_len = 2<<10;
+    const int num_threads = 4;
 
     dim3 dimGrid(1, 1, 1);
     dim3 dimBlock(num_threads, 1, 1);
@@ -206,13 +210,13 @@ int main(void)
 
 
     // 
-    //dump(h_x, buffer_len, "h_x.bin");
-    //dump(h_xmean, buffer_len, "h_xmean.bin");
-    //dump(h_y, buffer_len, "h_y.bin");
-    //dump(h_y_gold, buffer_len, "h_y_gold.bin");
-    //dump(h_xmean_gpu, buffer_len, "h_xmean_gpu.bin");
-    //dump(h_y_gpu, buffer_len, "h_y_gpu.bin");
-    //assert(compare(h_y, h_y_gold, buffer_len) && "gold does not match cpu.");
+    dump(h_x, buffer_len, "h_x.bin");
+    dump(h_xmean, buffer_len, "h_xmean.bin");
+    dump(h_y, buffer_len, "h_y.bin");
+    dump(h_y_gold, buffer_len, "h_y_gold.bin");
+    dump(h_xmean_gpu, buffer_len, "h_xmean_gpu.bin");
+    dump(h_y_gpu, buffer_len, "h_y_gpu.bin");
+    assert(compare(h_y, h_y_gold, buffer_len) && "gold does not match cpu.");
     if (!compare(h_xmean_gpu, h_xmean, buffer_len)) cout << "h_xmean errror" << endl;
     if (!compare(h_y_gpu, h_y, buffer_len)) cout << "y errror" << endl;
 
