@@ -7,8 +7,23 @@ using namespace std;
 #include <cuda_runtime.h>
 #include <helper_cuda.h>
 
+int dump(const float* array, size_t size, const std::string& filename) {
+    std::ofstream file(filename, std::ios::binary);
+    if (!file) {
+        std::cerr << "Failed to open file!" << std::endl;
+        return -1;
+    }
+    file.write(reinterpret_cast<const char*>(array), size * sizeof(float));
+    if (!file) {
+        std::cerr << "Failed to write data!" << std::endl;
+        return -1;
+    }
+    return 0;
+}
 
- void moving_average(const float* x, float* y, const size_t start, const size_t average_len, const size_t buffer_len){
+
+
+void moving_average(const float* x, float* y, const size_t start, const size_t average_len, const size_t buffer_len){
 
     for(size_t i = start; i<buffer_len; i++){
         size_t other_i = (i+buffer_len-average_len) % buffer_len;
@@ -44,6 +59,9 @@ int main(void)
     clock_t stop = clock();
     double calc_cpu = (double)(stop - start) / CLOCKS_PER_SEC;
     cout << "CPU: " << calc_cpu << endl;
+
+    dump(h_x, buffer_len, "h_x.bin");
+    dump(h_y, buffer_len, "h_y.bin");
 
     return EXIT_SUCCESS;
 }

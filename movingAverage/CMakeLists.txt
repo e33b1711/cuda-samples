@@ -19,7 +19,7 @@ include_directories(../Common)
 
 # Source file
 # Add target for simplePrintf
-add_executable(movingAverage movingAverage.cu)
+add_executable(movingAverage movingAverage.cu )
 
 target_compile_options(movingAverage PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda>)
 
