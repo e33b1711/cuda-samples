@@ -148,6 +148,7 @@ int main(void)
     float *h_xmean = (float *)malloc(buffer_len*sizeof(float));
     float *h_y = (float *)malloc(buffer_len*sizeof(float));
     float *h_y_gold = (float *)malloc(buffer_len*sizeof(float));
+    **/
 
     // input signal 
     for (int i = 0; i < buffer_len; i++) {
@@ -156,8 +157,10 @@ int main(void)
         }else{
             h_x[i] = 0.0;
         }
+        if(i % (2<<22) == 0 ) cout << ".." << endl;
     }
 
+    /** 
     // cpu ref calculation
     mean_cpu(h_x, h_xmean, buffer_len, num_threads);
     for(int i=0; i<num_threads; i++) h_y[buffer_len-i] = 0.0;
