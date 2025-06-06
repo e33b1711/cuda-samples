@@ -191,20 +191,27 @@ int main(void)
     double host2gpu = (double)(stop - start) / CLOCKS_PER_SEC * 1e6;
     cout << "host2gpu: " << host2gpu << " us" << endl;
     
+    for(int i=0; i<100; i++){
+        gpuErrchk(cudaMemcpy(d_y, d_xmean, buffer_len*sizeof(float), cudaMemcpyHostToDevice));
+        gpuErrchk(cudaMemcpy(d_y, d_y, buffer_len*sizeof(float), cudaMemcpyHostToDevice));
 
-    start = clock();
-    mean_gpu<<<dimGrid, dimBlock>>>(d_x, d_xmean, buffer_len, num_threads);
-    gpuErrchk(cudaDeviceSynchronize());
-    stop = clock();
-    double calc_gpu = (double)(stop - start) / CLOCKS_PER_SEC * 1e6;
-    cout << "GPU: " << calc_gpu << " us" << endl;
 
-    start = clock();
-    pp_mean_gpu<<<dimGrid, dimBlock>>>(d_xmean, d_y, buffer_len, num_threads, average_len);
-    gpuErrchk(cudaDeviceSynchronize());
-    stop = clock();
-    calc_gpu = (double)(stop - start) / CLOCKS_PER_SEC * 1e6;
-    cout << "GPU: " << calc_gpu << " us" << endl;
+        start = clock();
+        mean_gpu<<<dimGrid, dimBlock>>>(d_x, d_xmean, buffer_len, num_threads);
+        gpuErrchk(cudaDeviceSynchronize());
+        stop = clock();
+        double calc_gpu = (double)(stop - start) / CLOCKS_PER_SEC * 1e6;
+        cout << "GPU: " << calc_gpu << " us" << endl;
+
+        
+
+        start = clock();
+        pp_mean_gpu<<<dimGrid, dimBlock>>>(d_xmean, d_y, buffer_len, num_threads, average_len);
+        gpuErrchk(cudaDeviceSynchronize());
+        stop = clock();
+        calc_gpu = (double)(stop - start) / CLOCKS_PER_SEC * 1e6;
+        cout << "GPU: " << calc_gpu << " us" << endl;
+    }
 
     //device to host copy
     float *h_xmean_gpu = (float *)malloc(buffer_len*sizeof(float));
