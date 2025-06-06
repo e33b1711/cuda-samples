@@ -82,7 +82,7 @@ void mean_cpu(const float* x, float* xmean, const int buffer_len, const int num_
     for (int i = 0; i < buffer_len; i++) {
         float mean = 0.0;   
         for (int offset = 0; offset<num_threads; offset++){
-            int index = (i+offset) % buffer_len;
+            int index = (i+ buffer_len - offset) % buffer_len;
             mean += x[index];
         }   
         xmean[i] = mean;
@@ -127,7 +127,7 @@ int main(void)
 
     // input signal 
     for (int i = 0; i < buffer_len; i++) {
-        if(i < buffer_len-average_len){
+        if(i < buffer_len-average_len-num_threads){
             h_x[i] = static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
         }else{
             h_x[i] = 0.0;
@@ -136,8 +136,11 @@ int main(void)
 
     // cpu ref calculation
     mean_cpu(h_x, h_xmean, buffer_len, num_threads);
+    for(int i=0; i<num_threads; i++) h_y[buffer_len-i] = 0.0;
     pp_mean_cpu(h_xmean, h_y, buffer_len, num_threads, average_len);
+
     clock_t start = clock();
+    h_y_gold[buffer_len-1] = 0.0;
     moving_average(h_x, h_y_gold, average_len, buffer_len);
     clock_t stop = clock();
     double calc_cpu = (double)(stop - start) / CLOCKS_PER_SEC;
