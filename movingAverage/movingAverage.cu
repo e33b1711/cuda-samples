@@ -130,7 +130,7 @@ int main(void)
     // parameters
     const int average_len = 2<<12;
     const int buffer_len = 2<<20;
-    const int log2_num_threads = 7;
+    const int log2_num_threads = 12;
     const int num_threads = 2<<log2_num_threads;
 
     //const int average_len = 64;
@@ -164,8 +164,8 @@ int main(void)
     h_y_gold[buffer_len-1] = 0.0;
     moving_average(h_x, h_y_gold, average_len, buffer_len);
     clock_t stop = clock();
-    double calc_cpu = (double)(stop - start) / CLOCKS_PER_SEC;
-    cout << "CPU: " << calc_cpu << endl;
+    double calc_cpu = (double)(stop - start) / CLOCKS_PER_SEC * 1e6;
+    cout << "CPU: " << calc_cpu << " us" << endl;
 
 
 
@@ -182,22 +182,22 @@ int main(void)
     start = clock();
     gpuErrchk(cudaMemcpy(d_x, h_x, buffer_len*sizeof(float), cudaMemcpyHostToDevice));
     stop = clock();
-    double host2gpu = (double)(stop - start) / CLOCKS_PER_SEC;
-    cout << "host2gpu: " << host2gpu << endl;
+    double host2gpu = (double)(stop - start) / CLOCKS_PER_SEC * 1e6;
+    cout << "host2gpu: " << host2gpu << " us" << endl;
 
     start = clock();
     mean_gpu<<<dimGrid, dimBlock>>>(d_x, d_xmean, buffer_len, num_threads);
     gpuErrchk(cudaDeviceSynchronize());
     stop = clock();
-    double calc_gpu = (double)(stop - start) / CLOCKS_PER_SEC;
-    cout << "GPU: " << calc_gpu << endl;
+    double calc_gpu = (double)(stop - start) / CLOCKS_PER_SEC * 1e6;
+    cout << "GPU: " << calc_gpu << " us" << endl;
 
     start = clock();
     pp_mean_gpu<<<dimGrid, dimBlock>>>(d_xmean, d_y, buffer_len, num_threads, average_len);
     gpuErrchk(cudaDeviceSynchronize());
     stop = clock();
-    calc_gpu = (double)(stop - start) / CLOCKS_PER_SEC;
-    cout << "GPU: " << calc_gpu << endl;
+    calc_gpu = (double)(stop - start) / CLOCKS_PER_SEC * 1e6;
+    cout << "GPU: " << calc_gpu << " us" << endl;
 
     //device to host copy
     float *h_xmean_gpu = (float *)malloc(buffer_len*sizeof(float));
@@ -206,8 +206,8 @@ int main(void)
     gpuErrchk(cudaMemcpy(h_xmean_gpu, d_xmean, buffer_len*sizeof(float), cudaMemcpyDeviceToHost));
     gpuErrchk(cudaMemcpy(h_y_gpu, d_y, buffer_len*sizeof(float), cudaMemcpyDeviceToHost));
     stop = clock();
-    double gpu2host = (double)(stop - start) / CLOCKS_PER_SEC;;
-    cout << "gpu2host: " << gpu2host << endl;
+    double gpu2host = (double)(stop - start) / CLOCKS_PER_SEC * 1e6;
+    cout << "gpu2host: " << gpu2host << " us" << endl;
 
 
     //
