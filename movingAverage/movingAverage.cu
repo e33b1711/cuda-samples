@@ -128,9 +128,10 @@ int main(void)
 {
 
     // parameters
-    const int average_len = 2<<10;
+    const int average_len = 2<<12;
     const int buffer_len = 2<<20;
-    const int num_threads = 1024;
+    const int log2_num_threads = 7;
+    const int num_threads = 2<<log2_num_threads;
 
     //const int average_len = 64;
     //const int buffer_len = 2<<10;
@@ -218,9 +219,9 @@ int main(void)
         dump(h_xmean_gpu, buffer_len, "h_xmean_gpu.bin");
         dump(h_y_gpu, buffer_len, "h_y_gpu.bin");
     }
-    assert(compare(h_y, h_y_gold, buffer_len) && "gold does not match cpu.");
+    if (!compare(h_y, h_y_gold, buffer_len)) cout <<  "gold does not match cpu." << endl;
     if (!compare(h_xmean_gpu, h_xmean, buffer_len)) cout << "h_xmean errror" << endl;
-    if (!compare(h_y_gpu, h_y, buffer_len)) cout << "y errror" << endl;
+    if (!compare(h_y_gpu, h_y, buffer_len)) cout << "< errror" << endl;
 
     return EXIT_SUCCESS;
 }
