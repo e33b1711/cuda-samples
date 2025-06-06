@@ -43,20 +43,34 @@ __global__ void mean_gpu(const float* x, float* xmean, const int buffer_len, con
     int partial_buffer_len = buffer_len / num_threads;
     int start = thread_unique * partial_buffer_len;
 
-    printf(" thread_unique: %d partial_buffer_len %d start %d \n", thread_unique, partial_buffer_len, start);
-
+    // printf(" thread_unique: %d partial_buffer_len %d start %d \n", thread_unique, partial_buffer_len, start);
 
     //TODO this can be done recursivly
     for (int i = start; i < start + partial_buffer_len; i++) {
         float mean = 0.0;
-        if (thread_unique==0) printf("start: %d | ", i);     
+        // if (thread_unique==0) printf("start: %d | ", i);     
         for (int offset = 0; offset<num_threads; offset++){
             int index = (i+offset) % buffer_len;
             mean += x[index];
-            if (thread_unique==0) printf("%d ", index);
+            //if (thread_unique==0) printf("%d ", index);
         }
-        if (thread_unique==0) printf("\n");     
+        // if (thread_unique==0) printf("\n");     
         xmean[i] = mean;
+    }
+}
+
+
+__global__ void pp_mean_gpu(const float* xmean, float* y, const int buffer_len, const int num_threads, const int average_len)
+{
+    int block_size = blockDim.x * blockDim.y * blockDim.z;
+    int thread_in_block = threadIdx.x + blockDim.x * threadIdx.y + blockDim.x * blockDim.y * threadIdx.z;
+    int block_num = blockIdx.x + gridDim.x * blockIdx.y + gridDim.x * gridDim.y * blockIdx.z;
+    int thread_unique = block_num * block_size + thread_in_block;
+
+    //todo initial values
+    for (int i = thread_unique + num_threads; i < buffer_len; i += num_threads) {
+        int other_i = (i+buffer_len-average_len) % buffer_len;
+        y[i] =  y[i-1] + xmean[i] - xmean[other_i];
     }
 }
 
@@ -97,7 +111,7 @@ int main(void)
 
     // cpu ref calculation
     clock_t start = clock();
-    h_y[0] = 0.0;
+    h_y[buffer_len-1] = 0.0;
     moving_average(h_x, h_y, 1, average_len, buffer_len);
     clock_t stop = clock();
     double calc_cpu = (double)(stop - start) / CLOCKS_PER_SEC;
@@ -108,10 +122,12 @@ int main(void)
     //alloc gpu mem
     float *d_x = NULL;
     float *d_xmean = NULL;
+    float *d_y = NULL;
     gpuErrchk(cudaMalloc((void **)&d_x, buffer_len*sizeof(float)));
     gpuErrchk(cudaMalloc((void **)&d_xmean, buffer_len*sizeof(float)));
+    gpuErrchk(cudaMalloc((void **)&d_y, buffer_len*sizeof(float)));
 
-    
+
     //copy to gpu
     start = clock();
     gpuErrchk(cudaMemcpy(d_x, h_x, buffer_len*sizeof(float), cudaMemcpyHostToDevice));
@@ -126,10 +142,19 @@ int main(void)
     double calc_gpu = (double)(stop - start) / CLOCKS_PER_SEC;
     cout << "GPU: " << calc_cpu << endl;
 
+    start = clock();
+    pp_mean_gpu<<<dimGrid, dimBlock>>>(d_xmean, d_y, buffer_len, num_threads, average_len);
+    gpuErrchk(cudaDeviceSynchronize());
+    stop = clock();
+    calc_gpu += (double)(stop - start) / CLOCKS_PER_SEC;
+    cout << "GPU: " << calc_cpu << endl;
+
     //device to host copy
     float *h_xmean = (float *)malloc(buffer_len*sizeof(float));
+    float *h_y_gpu = (float *)malloc(buffer_len*sizeof(float));
     start = clock();
     gpuErrchk(cudaMemcpy(h_xmean, d_xmean, buffer_len*sizeof(float), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(h_y_gpu, d_y, buffer_len*sizeof(float), cudaMemcpyDeviceToHost));
     stop = clock();
     double gpu2host = (double)(stop - start) / CLOCKS_PER_SEC;;
     cout << "gpu2host: " << gpu2host << endl;
@@ -139,6 +164,7 @@ int main(void)
     dump(h_x, buffer_len, "h_x.bin");
     dump(h_y, buffer_len, "h_y.bin");
     dump(h_xmean, buffer_len, "h_xmean.bin");
+    dump(h_y_gpu, buffer_len, "h_y_gpu.bin");
 
     return EXIT_SUCCESS;
 }
