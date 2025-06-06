@@ -110,14 +110,24 @@ void moving_average(const float* x, float* y, const int average_len, const int b
     }
 }
 
+bool compare(const float* a, const float* b, const int buffer_len){
+    for(int i = 0; i<buffer_len; i++){
+        if (abs(a[i] - b[i])>0.005) {
+            cout << "compare error: " << a[i] << " " << b[i] << endl;
+            return false;
+        }
+    }
+    return true;
+}
+
 
 int main(void)
 {
 
     // parameters
     const int average_len = 2<<10;
-    const int buffer_len = 2<<16;
-    const int num_threads = 32;
+    const int buffer_len = 2<<20;
+    const int num_threads = 128;
 
     dim3 dimGrid(1, 1, 1);
     dim3 dimBlock(num_threads, 1, 1);
@@ -193,12 +203,14 @@ int main(void)
 
 
     // 
-    dump(h_x, buffer_len, "h_x.bin");
-    dump(h_xmean, buffer_len, "h_xmean.bin");
-    dump(h_y, buffer_len, "h_y.bin");
-    dump(h_y_gold, buffer_len, "h_y_gold.bin");
-    dump(h_xmean_gpu, buffer_len, "h_xmean_gpu.bin");
-    dump(h_y_gpu, buffer_len, "h_y_gpu.bin");
+    //dump(h_x, buffer_len, "h_x.bin");
+    //dump(h_xmean, buffer_len, "h_xmean.bin");
+    //dump(h_y, buffer_len, "h_y.bin");
+    //dump(h_y_gold, buffer_len, "h_y_gold.bin");
+    //dump(h_xmean_gpu, buffer_len, "h_xmean_gpu.bin");
+    //dump(h_y_gpu, buffer_len, "h_y_gpu.bin");
+    //assert(compare(h_y, h_y_gold, buffer_len) && "gold does not match cpu.");
+    assert(compare(h_y_gpu, h_y, buffer_len) && "gold does not match gpu.");
 
     return EXIT_SUCCESS;
 }
