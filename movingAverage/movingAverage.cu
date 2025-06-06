@@ -129,19 +129,22 @@ int main(void)
 
     // parameters
     const int average_len = 2<<12;
-    const int buffer_len = 2<<20;
+    const int buffer_len = 2<<28;
     const int log2_num_threads = 12;
     const int num_threads = 2<<log2_num_threads;
 
     //const int average_len = 64;
     //const int buffer_len = 2<<10;
     //const int num_threads = 4;
+    cout << "buffer_len: " << buffer_len << endl;
 
     dim3 dimGrid(1, 1, 1);
     dim3 dimBlock(num_threads, 1, 1);
     
+    
     // host buffers
     float *h_x = (float *)malloc(buffer_len*sizeof(float));
+    /** 
     float *h_xmean = (float *)malloc(buffer_len*sizeof(float));
     float *h_y = (float *)malloc(buffer_len*sizeof(float));
     float *h_y_gold = (float *)malloc(buffer_len*sizeof(float));
@@ -166,7 +169,7 @@ int main(void)
     clock_t stop = clock();
     double calc_cpu = (double)(stop - start) / CLOCKS_PER_SEC * 1e6;
     cout << "CPU: " << calc_cpu << " us" << endl;
-
+    **/
 
 
     //alloc gpu mem
@@ -177,13 +180,14 @@ int main(void)
     gpuErrchk(cudaMalloc((void **)&d_xmean, buffer_len*sizeof(float)));
     gpuErrchk(cudaMalloc((void **)&d_y, buffer_len*sizeof(float)));
 
-
+    
     //copy to gpu
-    start = clock();
+    clock_t start = clock();
     gpuErrchk(cudaMemcpy(d_x, h_x, buffer_len*sizeof(float), cudaMemcpyHostToDevice));
-    stop = clock();
+    clock_t stop = clock();
     double host2gpu = (double)(stop - start) / CLOCKS_PER_SEC * 1e6;
     cout << "host2gpu: " << host2gpu << " us" << endl;
+    
 
     start = clock();
     mean_gpu<<<dimGrid, dimBlock>>>(d_x, d_xmean, buffer_len, num_threads);
@@ -209,7 +213,7 @@ int main(void)
     double gpu2host = (double)(stop - start) / CLOCKS_PER_SEC * 1e6;
     cout << "gpu2host: " << gpu2host << " us" << endl;
 
-
+    /**
     //
     if(buffer_len<=2<<10){
         dump(h_x, buffer_len, "h_x.bin");
@@ -222,6 +226,7 @@ int main(void)
     if (!compare(h_y, h_y_gold, buffer_len)) cout <<  "gold does not match cpu." << endl;
     if (!compare(h_xmean_gpu, h_xmean, buffer_len)) cout << "h_xmean errror" << endl;
     if (!compare(h_y_gpu, h_y, buffer_len)) cout << "< errror" << endl;
+    **/
 
     return EXIT_SUCCESS;
 }
