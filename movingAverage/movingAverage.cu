@@ -172,14 +172,14 @@ int main(void)
     gpuErrchk(cudaDeviceSynchronize());
     stop = clock();
     double calc_gpu = (double)(stop - start) / CLOCKS_PER_SEC;
-    cout << "GPU: " << calc_cpu << endl;
+    cout << "GPU: " << calc_gpu << endl;
 
     start = clock();
     pp_mean_gpu<<<dimGrid, dimBlock>>>(d_xmean, d_y, buffer_len, num_threads, average_len);
     gpuErrchk(cudaDeviceSynchronize());
     stop = clock();
     calc_gpu += (double)(stop - start) / CLOCKS_PER_SEC;
-    cout << "GPU: " << calc_cpu << endl;
+    cout << "GPU: " << calc_gpu << endl;
 
     //device to host copy
     float *h_xmean_gpu = (float *)malloc(buffer_len*sizeof(float));
