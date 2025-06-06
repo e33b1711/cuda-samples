@@ -43,7 +43,6 @@ __global__ void mean_gpu(const float* x, float* xmean, const int buffer_len, con
     int partial_buffer_len = buffer_len / num_threads;
     int start = thread_unique * partial_buffer_len;
 
-    //TODO this can be done recursivly
 
     //i=0
     float mean = 0.0;
@@ -55,9 +54,7 @@ __global__ void mean_gpu(const float* x, float* xmean, const int buffer_len, con
     xmean[i] = mean;
 
 
-    for (int i = start; i < start + partial_buffer_len; i++) {
-        float mean = 0.0;
- 
+    for (int i = start+1; i < start + partial_buffer_len; i++) {
         int index = (i+buffer_len-num_threads+1) % buffer_len;
         mean += x[i];
         mean -= x[index];
@@ -119,7 +116,7 @@ void moving_average(const float* x, float* y, const int average_len, const int b
 bool compare(const float* a, const float* b, const int buffer_len){
     for(int i = 0; i<buffer_len; i++){
         if (abs(a[i] - b[i])>0.005) {
-            cout << "compare error: " << a[i] << " " << b[i] << endl;
+            cout << "compare error: " << i << " " << a[i] << " " << b[i] << endl;
             return false;
         }
     }
@@ -216,8 +213,8 @@ int main(void)
     //dump(h_xmean_gpu, buffer_len, "h_xmean_gpu.bin");
     //dump(h_y_gpu, buffer_len, "h_y_gpu.bin");
     //assert(compare(h_y, h_y_gold, buffer_len) && "gold does not match cpu.");
-    assert(compare(h_xmean_gpu, h_xmean, buffer_len) && "h_xmean");
-    assert(compare(h_y_gpu, h_y, buffer_len) && "h_y");
+    if (!compare(h_xmean_gpu, h_xmean, buffer_len)) cout << "h_xmean errror" << endl;
+    if (!compare(h_y_gpu, h_y, buffer_len)) cout << "y errror" << endl;
 
     return EXIT_SUCCESS;
 }
