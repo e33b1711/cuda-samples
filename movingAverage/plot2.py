@@ -16,6 +16,23 @@ plt.xlabel("Index")
 plt.ylabel("Value")
 plt.show()
 
+mean_gpu = np.fromfile("h_xmean_gpu.bin", dtype=np.float32)
+mean = np.fromfile("h_xmean.bin", dtype=np.float32)
+
+h_y = np.fromfile("h_y.bin", dtype=np.float32)
+h_y_gpu = np.fromfile("h_y_gpu.bin", dtype=np.float32)
+
+plt.figure(figsize=(12, 6))
+plt.plot(mean_gpu, label="mean_gpu")
+plt.plot(mean, label="mean")
+#plt.plot(h_y, label="h_y")
+#plt.plot(h_y_gpu, label="h_y_gpu")
+plt.legend()
+plt.title("Float Dump Plot")
+plt.xlabel("Index")
+plt.ylabel("Value")
+plt.show()
+
 x = np.fromfile("h_x.bin", dtype=np.float32)
 gold = np.fromfile("h_y_gold.bin", dtype=np.float32)
 cpu = np.fromfile("h_y.bin", dtype=np.float32)

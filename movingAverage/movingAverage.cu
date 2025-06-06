@@ -50,7 +50,7 @@ __global__ void mean_gpu(const float* x, float* xmean, const int buffer_len, con
         float mean = 0.0;
         // if (thread_unique==0) printf("start: %d | ", i);     
         for (int offset = 0; offset<num_threads; offset++){
-            int index = (i+offset) % buffer_len;
+            int index = (i+buffer_len-offset) % buffer_len;
             mean += x[index];
             //if (thread_unique==0) printf("%d ", index);
         }
@@ -68,7 +68,10 @@ __global__ void pp_mean_gpu(const float* xmean, float* y, const int buffer_len, 
     int thread_unique = block_num * block_size + thread_in_block;
 
     //todo initial values
-    for (int i = thread_unique + num_threads; i < buffer_len; i += num_threads) {
+    y[buffer_len-num_threads+thread_unique] = 0.0;
+
+
+    for (int i = thread_unique; i < buffer_len; i += num_threads) {
         int other_x = (i+buffer_len-average_len) % buffer_len;
         int other_y = (i+buffer_len-num_threads) % buffer_len;
         y[i] =  y[other_y] + xmean[i] - xmean[other_x];
