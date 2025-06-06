@@ -8,66 +8,42 @@ using namespace std;
 #include <helper_cuda.h>
 
 
-#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+ void moving_average(const float* x, float* y, const size_t start, const size_t average_len, const size_t buffer_len){
 
-inline void gpuAssert(cudaError_t code, const string file, int line, bool abort = true){
-    if (code != cudaSuccess){
-        cerr <<  "GPUassert: " << cudaGetErrorString(code) << " " << file << " " << line << endl;
-        if (abort) exit(code);
-    }
-}
-
-__global__ void array_sum_gpu(const int* a, const int* b, const int* c, int* result, const int num_elements)
-{
-    int block_size = blockDim.x * blockDim.y * blockDim.z;
-    int thread_in_block = threadIdx.x + blockDim.x * threadIdx.y + blockDim.x * blockDim.y * threadIdx.z;
-    int block_num = blockIdx.x + gridDim.x * blockIdx.y + gridDim.x * gridDim.y * blockIdx.z;
-    int gid = block_num * block_size + thread_in_block;
-
-    //printf(" array_sum_gpu, gid: %d \n", gid);
-    if (gid < num_elements){
-        result[gid] = a[gid] + b[gid] + c[gid];
-    }
-}
-
- void moving_average(const float* x, const float* y, const size_t offset, const size_t num_samples, const size_t average_len, const size_t buffer_len){
-
-
-    for(size_t i = offset; i<offset+num_samples; i++){
-        if !(i < buffer_len) break;
+    for(size_t i = start; i<buffer_len; i++){
         size_t other_i = (i+buffer_len-average_len) % buffer_len;
         y[i] =  y[i-1] + x[i] - x[other_i];
     }
 }
 
-/**
- * Host main routine
- */
+
 int main(void)
 {
 
+    // parameters
+    const size_t average_len = 2<<8;
+    const size_t buffer_len = 2<<16;
+    
+    // host buffers
+    float *h_x = (float *)malloc(buffer_len*sizeof(float));
+    float *h_y = (float *)malloc(buffer_len*sizeof(float));
 
-    const size_t average_len = 2<<16;
-    const size_t buffer_len = 2<<28;
-    const size_t partial_buf_len = 2<<24;
-    int *h_x = (float *)malloc(num_elements*sizeof(float));
-    int *h_y = (float *)malloc(num_elements*sizeof(float));
-
+    // input signal 
     for (int i = 0; i < buffer_len; i++) {
-        h_x[i] = static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
+        if(i < buffer_len-average_len){
+            h_x[i] = static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
+        }else{
+            h_x[i] = 0.0;
+        }
     }
 
-    //starting the moving average
-    h_y[0] = h_x[0];
-    for (int i = 1; i < average_len; i++) {
-        h_y[i] =  h_y[i-1] + h_x[i]
-    }
-    size_t offset = average_len;
-
-    //cpu calculating the rest
-    moving_average(h_x, h_y, offset, buffer_len, average_len, buffer_len){
-
-
+    // cpu ref calculation
+    clock_t start = clock();
+    h_y[0] = 0.0;
+    moving_average(h_x, h_y, 1, buffer_len, average_len);
+    clock_t stop = clock();
+    double calc_cpu = (double)(stop - start) / CLOCKS_PER_SEC;
+    cout << "CPU: " << calc_cpu << endl;
 
     return EXIT_SUCCESS;
 }

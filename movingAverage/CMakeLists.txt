@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../cmake/Modules")
-
-project(simplePrintf LANGUAGES C CXX CUDA)
+project(movingAverage LANGUAGES C CXX CUDA)
 
 find_package(CUDAToolkit REQUIRED)
 
@@ -17,14 +15,14 @@ else()
 endif()
 
 # Include directories and libraries
-include_directories(../../../Common)
+include_directories(../Common)
 
 # Source file
 # Add target for simplePrintf
-add_executable(simplePrintf simplePrintf.cu)
+add_executable(movingAverage movingAverage.cu)
 
-target_compile_options(simplePrintf PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda>)
+target_compile_options(movingAverage PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda>)
 
-target_compile_features(simplePrintf PRIVATE cxx_std_17 cuda_std_17)
+target_compile_features(movingAverage PRIVATE cxx_std_17 cuda_std_17)
 
-set_target_properties(simplePrintf PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+set_target_properties(movingAverage PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
