@@ -132,9 +132,9 @@ int main(void)
     const int buffer_len = 2<<20;
     const int num_threads = 1024;
 
-    const int average_len = 64;
-    const int buffer_len = 2<<10;
-    const int num_threads = 4;
+    //const int average_len = 64;
+    //const int buffer_len = 2<<10;
+    //const int num_threads = 4;
 
     dim3 dimGrid(1, 1, 1);
     dim3 dimBlock(num_threads, 1, 1);
