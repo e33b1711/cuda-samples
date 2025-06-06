@@ -43,18 +43,24 @@ __global__ void mean_gpu(const float* x, float* xmean, const int buffer_len, con
     int partial_buffer_len = buffer_len / num_threads;
     int start = thread_unique * partial_buffer_len;
 
-    // printf(" thread_unique: %d partial_buffer_len %d start %d \n", thread_unique, partial_buffer_len, start);
-
     //TODO this can be done recursivly
+
+    //i=0
+    float mean = 0.0;
+    int i = 0;
+    for (int offset = 0; offset<num_threads; offset++){
+        int index = (i+buffer_len-offset) % buffer_len;
+        mean += x[index];
+    }
+    xmean[i] = mean;
+
+
     for (int i = start; i < start + partial_buffer_len; i++) {
         float mean = 0.0;
-        // if (thread_unique==0) printf("start: %d | ", i);     
-        for (int offset = 0; offset<num_threads; offset++){
-            int index = (i+buffer_len-offset) % buffer_len;
-            mean += x[index];
-            //if (thread_unique==0) printf("%d ", index);
-        }
-        // if (thread_unique==0) printf("\n");     
+ 
+        int index = (i+buffer_len-num_threads+1) % buffer_len;
+        mean += x[i];
+        mean -= x[index];
         xmean[i] = mean;
     }
 }
@@ -188,7 +194,7 @@ int main(void)
     pp_mean_gpu<<<dimGrid, dimBlock>>>(d_xmean, d_y, buffer_len, num_threads, average_len);
     gpuErrchk(cudaDeviceSynchronize());
     stop = clock();
-    calc_gpu += (double)(stop - start) / CLOCKS_PER_SEC;
+    calc_gpu = (double)(stop - start) / CLOCKS_PER_SEC;
     cout << "GPU: " << calc_gpu << endl;
 
     //device to host copy
@@ -210,7 +216,8 @@ int main(void)
     //dump(h_xmean_gpu, buffer_len, "h_xmean_gpu.bin");
     //dump(h_y_gpu, buffer_len, "h_y_gpu.bin");
     //assert(compare(h_y, h_y_gold, buffer_len) && "gold does not match cpu.");
-    assert(compare(h_y_gpu, h_y, buffer_len) && "gold does not match gpu.");
+    assert(compare(h_xmean_gpu, h_xmean, buffer_len) && "h_xmean");
+    assert(compare(h_y_gpu, h_y, buffer_len) && "h_y");
 
     return EXIT_SUCCESS;
 }
