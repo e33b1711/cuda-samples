@@ -115,9 +115,9 @@ int main(void)
 {
 
     // parameters
-    const int average_len = 16;
-    const int buffer_len = 256;
-    const int num_threads = 4;
+    const int average_len = 2<<10;
+    const int buffer_len = 2<<16;
+    const int num_threads = 32;
 
     dim3 dimGrid(1, 1, 1);
     dim3 dimBlock(num_threads, 1, 1);
