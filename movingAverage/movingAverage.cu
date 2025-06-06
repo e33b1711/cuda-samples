@@ -27,6 +27,7 @@ void moving_average(const float* x, float* y, const size_t start, const size_t a
 
     for(size_t i = start; i<buffer_len; i++){
         size_t other_i = (i+buffer_len-average_len) % buffer_len;
+        cout << "i: " << i << ", other_i: " << other_i << endl;
         y[i] =  y[i-1] + x[i] - x[other_i];
     }
 }
@@ -36,8 +37,8 @@ int main(void)
 {
 
     // parameters
-    const size_t average_len = 2<<8;
-    const size_t buffer_len = 2<<16;
+    const size_t average_len = 16;
+    const size_t buffer_len = 256;
     
     // host buffers
     float *h_x = (float *)malloc(buffer_len*sizeof(float));
@@ -55,7 +56,7 @@ int main(void)
     // cpu ref calculation
     clock_t start = clock();
     h_y[0] = 0.0;
-    moving_average(h_x, h_y, 1, buffer_len, average_len);
+    moving_average(h_x, h_y, 1, average_len, buffer_len);
     clock_t stop = clock();
     double calc_cpu = (double)(stop - start) / CLOCKS_PER_SEC;
     cout << "CPU: " << calc_cpu << endl;
