@@ -8,8 +8,6 @@ set(CMAKE_CUDA_STANDARD 11)
 # Specify the source files
 set(SOURCES
     src/main.cu
-    src/signal.cu
-    src/utils.cu    # ...existing code...
     src/draw.cpp
 )
 

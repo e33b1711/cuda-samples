@@ -12,7 +12,7 @@ void displaySignalWithCudaInterop(float2* d_signal, int signal_length) {
     }
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-    GLFWwindow* window = glfwCreateWindow(800, 800, "CUDA Complex Signal", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(1600, 1200, "CUDA Complex Signal", NULL, NULL);
     if (!window) {
         std::cerr << "Failed to create GLFW window\n";
         glfwTerminate();
