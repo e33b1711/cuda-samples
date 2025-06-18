@@ -9,7 +9,8 @@ set(CMAKE_CUDA_STANDARD 11)
 set(SOURCES
     src/main.cu
     src/signal.cu
-    src/utils.cu
+    src/utils.cu    # ...existing code...
+    src/draw.cpp
 )
 
 set(CMAKE_CUDA_ARCHITECTURES 60 61 70 75 80 86)
@@ -25,6 +26,15 @@ find_package(PkgConfig REQUIRED)
 pkg_search_module(GLFW REQUIRED glfw3)
 pkg_search_module(GLEW REQUIRED glew)
 
+find_package(CUDA REQUIRED)
+
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${GLFW_INCLUDE_DIRS}
+    ${GLEW_INCLUDE_DIRS}
+    ${CUDA_INCLUDE_DIRS} 
+    src
+)
+
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
     ${OPENGL_LIBRARIES}
@@ -34,8 +44,3 @@ target_link_libraries(${PROJECT_NAME}
     cudart
 )
 
-target_include_directories(${PROJECT_NAME} PRIVATE
-    ${GLFW_INCLUDE_DIRS}
-    ${GLEW_INCLUDE_DIRS}
-    src
-)
