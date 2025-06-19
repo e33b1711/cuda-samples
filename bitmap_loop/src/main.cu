@@ -3,6 +3,7 @@
 #include <cuda_gl_interop.h>
 #include <stdio.h>
 #include <assert.h>
+#include <sys/time.h>
 
 #define WIDTH  512
 #define HEIGHT 512
@@ -60,11 +61,24 @@ int main(int argc, char **argv) {
     glutDisplayFunc(dummy_display); // Register dummy display callback
     initPixelBuffer(&pbo, &tex, &cuda_pbo_resource);
 
+    struct timeval start, now;
+    gettimeofday(&start, NULL);
+    int frames = 0;
+
     while (true) {
         launch_cuda_kernel();
         drawGL(pbo, tex, WIDTH, HEIGHT);
         frame++;
+        frames++;
         glutMainLoopEvent();
+
+        gettimeofday(&now, NULL);
+        double elapsed = (now.tv_sec - start.tv_sec) + (now.tv_usec - start.tv_usec) / 1e6;
+        if (elapsed >= 1.0) {
+            printf("FPS: %d\n", frames);
+            frames = 0;
+            start = now;
+        }
         // usleep(16000);
     }
 
