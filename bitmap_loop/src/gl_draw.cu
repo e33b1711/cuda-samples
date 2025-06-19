@@ -4,10 +4,10 @@
 
 #include <stdio.h>
 
-void initGLUT(int *argc, char **argv, void (*cleanupFunc)()) {
+void initGLUT(int *argc, char **argv, void (*cleanupFunc)(), int height, int width) {
     glutInit(argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA);
-    glutInitWindowSize(512, 512);
+    glutInitWindowSize(width, height);
     glutCreateWindow("CUDA Bitmap via GLUT");
     GLenum err = glewInit();
     if (err != GLEW_OK) {
@@ -17,16 +17,16 @@ void initGLUT(int *argc, char **argv, void (*cleanupFunc)()) {
     atexit(cleanupFunc);
 }
 
-void initPixelBuffer(GLuint *pbo, GLuint *tex, cudaGraphicsResource **cuda_pbo_resource) {
+void initPixelBuffer(GLuint *pbo, GLuint *tex, cudaGraphicsResource **cuda_pbo_resource, int height, int width) {
     glGenBuffers(1, pbo);
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, *pbo);
-    glBufferData(GL_PIXEL_UNPACK_BUFFER, 512 * 512 * 4, 0, GL_DYNAMIC_DRAW);
+    glBufferData(GL_PIXEL_UNPACK_BUFFER, width * height * 4, 0, GL_DYNAMIC_DRAW);
 
     cudaGraphicsGLRegisterBuffer(cuda_pbo_resource, *pbo, cudaGraphicsMapFlagsWriteDiscard);
 
     glGenTextures(1, tex);
     glBindTexture(GL_TEXTURE_2D, *tex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 512, 512, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glEnable(GL_TEXTURE_2D);

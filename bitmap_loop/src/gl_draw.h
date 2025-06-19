@@ -9,8 +9,8 @@
 extern "C" {
 #endif
 
-void initGLUT(int *argc, char **argv, void (*cleanupFunc)());
-void initPixelBuffer(GLuint *pbo, GLuint *tex, cudaGraphicsResource **cuda_pbo_resource);
+void initGLUT(int *argc, char **argv, void (*cleanupFunc)(), int height, int width);
+void initPixelBuffer(GLuint *pbo, GLuint *tex, cudaGraphicsResource **cuda_pbo_resource, int height, int width);
 void drawGL(GLuint pbo, GLuint tex, int width, int height);
 
 #ifdef __cplusplus
