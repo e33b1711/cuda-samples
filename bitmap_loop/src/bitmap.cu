@@ -2,24 +2,27 @@
 #include <curand_kernel.h>
 #include <stdio.h>
 #include <assert.h>
-#include <cufft.h> // Add this include
+#include <cufft.h>
 
 #include "aux.h"
 
-__device__ float db_abs(float2 d_signal) {
-    return 10.0f * log10(pow(d_signal.x, 2) + pow(d_signal.y,2));
+__device__ float db_abs(float d_signal) {
+    return 20.0f * log10(d_signal);
 }
 
-__global__ void fill_bitmap_spec(uchar4 *ptr, int width, int height, int frame, float2* d_signal) {
+__global__ void fill_bitmap_spec(uchar4 *ptr, int width, int height, int frame, float* d_signal, int color, bool clear) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     if (x >= width || y >= height) return;
     int idx = y * width + x;
 
-    ptr[idx].x = 0;
-    ptr[idx].y = 0;
-    ptr[idx].z = 0;
-    ptr[idx].w = 255;
+    if (clear){
+        ptr[idx].x = 0;
+        ptr[idx].y = 0;
+        ptr[idx].z = 0;
+        ptr[idx].w = 0;
+    }
+
 
     const float scale = 2.0f;
 
@@ -34,6 +37,8 @@ __global__ void fill_bitmap_spec(uchar4 *ptr, int width, int height, int frame, 
     int y_min = min(min(left_y, y_mid),right_y);
 
     if (y <= y_max and y >= y_min){
-        ptr[idx].y = 255;
+        if (color==0) ptr[idx].x = 255;
+        if (color==1) ptr[idx].z = 255;
+        if (color==2) ptr[idx].y = 255;
     }
 }
