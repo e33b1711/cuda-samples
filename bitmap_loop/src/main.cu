@@ -12,7 +12,7 @@
 const int WIDTH = 1024;
 const int HEIGHT = 512;
 const int SIGNAL_LENGTH = 1024;
-const int COUNT = 1024;
+const int COUNT = 1024*16;
 
 cudaGraphicsResource *cuda_pbo_resource;
 GLuint pbo = 0, tex = 0;
