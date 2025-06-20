@@ -1,6 +1,6 @@
 #pragma once
 
-#include <GL/glew.h>      // Always first!
+#include <GL/glew.h>    
 #include <GL/freeglut.h>
 #include <cuda_gl_interop.h>
 #include <cuda_runtime.h>

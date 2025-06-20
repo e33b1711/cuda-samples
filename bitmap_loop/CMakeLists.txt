@@ -22,6 +22,8 @@ include_directories(
 set(SOURCES
     src/main.cu
     src/gl_draw.cu
+    src/signal.cu
+    src/bitmap.cu
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
@@ -36,6 +38,7 @@ target_link_libraries(cuda_glut_bitmap
     glut
     cuda
     cudart
+    cufft
 )
 
 set_target_properties(cuda_glut_bitmap PROPERTIES
