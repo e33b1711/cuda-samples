@@ -40,7 +40,8 @@ void generate_signal(float2* d_signal, const float phi, const int length, const 
     cudaEventSynchronize(stop);
     float ms = 0.0f;
     cudaEventElapsedTime(&ms, start, stop);
-    //printf("Signal generation time: %.3f ms\n", ms);
+    static int disp_count = 0;
+    if((disp_count++)%100 == 0) printf("Signal generation time: %.3f ms\n", ms);
 
     // Cleanup
     cudaEventDestroy(start);
@@ -73,7 +74,8 @@ void run_fft(float2* t_domain, float2* f_domain, int length, int count) {
     cudaEventSynchronize(stop);
     float ms = 0.0f;
     cudaEventElapsedTime(&ms, start, stop);
-    //printf("FFT calculation time: %.3f ms\n", ms);
+    static int disp_count = 0;
+    if((disp_count++)%100 == 0) printf("FFT calculation time: %.3f ms\n", ms);
 
     // Cleanup
     cudaEventDestroy(start);
@@ -100,7 +102,8 @@ __global__ void fft_detector(const float2* f_domain, float* f_max, float* f_min,
     float mean_v = 0.0f;
     int idx= bin_idx + thread_idx*n_bins;
     while (idx < n_bins*n_spec) {
-        float abs_v = sqrt( pow(f_domain[idx].x, 2) + pow(f_domain[idx].y, 2) ); 
+        float2 fd = f_domain[idx];
+        float abs_v = sqrtf(fd.x * fd.x + fd.y * fd.y);
         max_v = max(max_v, abs_v);
         min_v = min(min_v, abs_v);
         mean_v += abs_v; 
@@ -149,7 +152,8 @@ void fft_postproc(float2* f_domain, float* f_max, float* f_min, float* f_mean, c
     cudaEventSynchronize(stop);
     float ms = 0.0f;
     cudaEventElapsedTime(&ms, start, stop);
-    //printf("FFT postproc time: %.3f ms\n", ms);
+    static int disp_count = 0;
+    if((disp_count++)%100 == 0) printf("FFT postproc time: %.3f ms\n", ms);
 
     // Cleanup
     cudaEventDestroy(start);

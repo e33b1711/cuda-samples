@@ -1,13 +1,14 @@
 performance:
 ( ) pipelining / parallel processing
-( ) fft performance
-( ) fft detector optimize
-( ) signal generation opti
+(x) fft performance
+(x) fft detector optimize
+(x) signal generation opti
 
 
 
 
 features:
 ( ) fft window
+( ) fft overlap
 ( ) polychrome
 ( ) transient signal / modulated signal

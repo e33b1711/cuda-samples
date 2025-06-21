@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
         std::chrono::duration<double> elapsed = now - last_time;
         if (elapsed.count() >= 1.0) {
             printf("FPS: %d\n", frame_count);
-            printf("Max rate: %f MHz\n", float(frame_count * SIGNAL_LENGTH * COUNT) / 1e6);
+            printf("Max rate: %f MHz\n", float(frame_count) * float(SIGNAL_LENGTH) * float(COUNT) / 1e6f);
             frame_count = 0;
             last_time = now;
         }
