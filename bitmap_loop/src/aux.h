@@ -1,3 +1,5 @@
+#pragma once
+
 #define CUDA_SAFE_CALL(call) do { \
     cudaError_t err = call; \
     if (err != cudaSuccess) { \
@@ -5,3 +7,5 @@
         exit(1); \
     } \
 } while (0)
+
+void time_info();

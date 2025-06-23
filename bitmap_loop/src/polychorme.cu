@@ -5,10 +5,7 @@
 
 #include "aux.h"
 
-//TODO log mapping + color sheme
-
 //TODO line interp
-
 
 __device__ uchar4 mapping(unsigned short hist_count, const int n_spec ){
 
@@ -48,7 +45,6 @@ __global__ void polchrome_kernel(const float2* f_domain, uchar4 *ptr, const shor
 
     assert(gridDim.x == 1024);
     assert(blockDim.x == 32);
-
 
     const int bin_idx = blockIdx.x;
     const int thread_idx = threadIdx.x;
@@ -91,6 +87,7 @@ __global__ void polchrome_kernel(const float2* f_domain, uchar4 *ptr, const shor
     assert(mapping(1)==uchar4(0,1,0,0))
     assert(mapping(n_spec)==uchar4(0,0,1,0))
 }
+
 
 void polchrome(float2* f_domain, unsigned short* hist, const int block_len, const int n_blocks){
     // Timing start

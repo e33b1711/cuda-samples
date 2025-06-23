@@ -4,6 +4,11 @@
 
 #include <stdio.h>
 
+
+cudaGraphicsResource *cuda_pbo_resource;
+GLuint pbo = 0, tex = 0;
+
+
 void initGLUT(int *argc, char **argv, void (*cleanupFunc)(), int height, int width) {
     glutInit(argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA);
@@ -16,6 +21,7 @@ void initGLUT(int *argc, char **argv, void (*cleanupFunc)(), int height, int wid
     }
     atexit(cleanupFunc);
 }
+
 
 void initPixelBuffer(GLuint *pbo, GLuint *tex, cudaGraphicsResource **cuda_pbo_resource, int height, int width) {
     glGenBuffers(1, pbo);
@@ -32,6 +38,7 @@ void initPixelBuffer(GLuint *pbo, GLuint *tex, cudaGraphicsResource **cuda_pbo_r
     glEnable(GL_TEXTURE_2D);
 }
 
+
 void drawGL(GLuint pbo, GLuint tex, int width, int height) {
     glClear(GL_COLOR_BUFFER_BIT);
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo);
@@ -46,4 +53,36 @@ void drawGL(GLuint pbo, GLuint tex, int width, int height) {
     glEnd();
 
     glutSwapBuffers();
+}
+
+
+void dummy_display() {}
+
+
+void draw_init(const int height, const int width){
+    initGLUT(&argc, argv, cleanup, height, width);
+    glutDisplayFunc(dummy_display); // Register dummy display callback
+    initPixelBuffer(&pbo, &tex, &cuda_pbo_resource,);
+
+}
+
+
+void draw_cleanup() {
+    cudaGraphicsUnregisterResource(cuda_pbo_resource);
+    glDeleteBuffers(1, &pbo);
+    glDeleteTextures(1, &tex);
+}
+
+
+void draw_loop(uchar4* bitmap, const int width, const int height){
+
+    uchar4 *dptr;
+    size_t num_bytes;
+    CUDA_SAFE_CALL(cudaGraphicsMapResources(1, &cuda_pbo_resource, 0));
+    CUDA_SAFE_CALL(cudaGraphicsResourceGetMappedPointer((void**)&dptr, &num_bytes, cuda_pbo_resource));
+    CUDA_SAFE_CALL(cudaDeviceSynchronize(cudaMemcopy(dptr, bitmap, WIDTH * HEIGHT * sizeof(uchar4))));
+    CUDA_SAFE_CALL(cudaGraphicsUnmapResources(1, &cuda_pbo_resource, WIDTH * HEIGHT * sizeof(uchar4)));
+    drawGL(pbo, tex, WIDTH, HEIGHT);
+
+    glutMainLoopEvent();
 }

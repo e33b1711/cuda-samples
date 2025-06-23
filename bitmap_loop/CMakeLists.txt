@@ -20,10 +20,12 @@ include_directories(
 )
 
 set(SOURCES
-    src/main.cu
+    src/aux.cu
     src/gl_draw.cu
+    src/fft.cu
     src/signal.cu
-    src/bitmap.cu
+    src/main.cu
+    src/polycrome.cu
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
