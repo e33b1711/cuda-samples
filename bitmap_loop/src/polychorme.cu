@@ -92,7 +92,7 @@ __global__ void polchrome_kernel(const float2* f_domain, uchar4 *ptr, const shor
     assert(mapping(n_spec)==uchar4(0,0,1,0))
 }
 
-void polchrome(float2* f_domain, unsigned short* hist, const int n_bins, const int n_spec){
+void polchrome(float2* f_domain, unsigned short* hist, const int block_len, const int n_blocks){
     // Timing start
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
@@ -101,7 +101,7 @@ void polchrome(float2* f_domain, unsigned short* hist, const int n_bins, const i
 
     const int blockSize = 32;
     const int numBlocks = n_bins;
-    fft_detector<<<numBlocks, blockSize>>>(f_domain, hist, n_bins, n_spec);
+    polchrome_kernel<<<numBlocks, blockSize>>>(f_domain, hist, block_len, n_blocks);
     CUDA_SAFE_CALL(cudaGetLastError());
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
 
@@ -116,18 +116,4 @@ void polchrome(float2* f_domain, unsigned short* hist, const int n_bins, const i
     // Cleanup
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
-}
-
-
-__global__ void fill_bitmap_spec(uchar4 *ptr, int width, int height, int frame, uchar4 *ptr, int color, bool clear) {
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
-    if (x >= width || y >= height) return;
-    int idx = y * width + x;
-
-        ptr[idx].x = hist[idx]%256;
-        ptr[idx].z = 0;
-        ptr[idx].y = 0;
-        ptr[idx].w = 255;
-
 }

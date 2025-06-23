@@ -9,10 +9,11 @@
 #include "signal.h"
 #include "polychrome.h"
 
-const int WIDTH = 1024;
+
+const int BLOCK_LEN = 1024;
+const int N_BLOCKS = 1024*16;
+const int WIDTH = SIGNAL_LENGTH;
 const int HEIGHT = 512;
-const int SIGNAL_LENGTH = 1024;
-const int COUNT = 1024*16;
 
 cudaGraphicsResource *cuda_pbo_resource;
 GLuint pbo = 0, tex = 0;
@@ -49,8 +50,8 @@ int main(int argc, char **argv) {
     float2* t_domain = nullptr;
     float2* f_domain = nullptr;
     uchar4* bitmap = nullptr;
-    CUDA_SAFE_CALL(cudaMalloc(&t_domain, SIGNAL_LENGTH * COUNT * sizeof(float2)));
-    CUDA_SAFE_CALL(cudaMalloc(&f_domain, SIGNAL_LENGTH * COUNT * sizeof(float2)));
+    CUDA_SAFE_CALL(cudaMalloc(&t_domain, BLOCK_LEN * N_BLOCKS * sizeof(float2)));
+    CUDA_SAFE_CALL(cudaMalloc(&f_domain, BLOCK_LEN * N_BLOCKS * sizeof(float2)));
     CUDA_SAFE_CALL(cudaMalloc(&bitmap, WIDTH * HEIGHT * sizeof(uchar4)));
 
     using clock = std::chrono::high_resolution_clock;
@@ -59,13 +60,13 @@ int main(int argc, char **argv) {
 
     while (true) {
 
-        generate_signal(t_domain, 0.0f * float(frame), SIGNAL_LENGTH*COUNT, frame);
+        generate_signal(t_domain, 0.0f * float(frame), BLOCK_LEN*N_BLOCKS, frame);
 
-        run_fft(t_domain, f_domain, SIGNAL_LENGTH, COUNT);
+        run_fft(t_domain, f_domain, BLOCK_LEN, N_BLOCKS);
 
-        polchrome(f_domain, bitmap, SIGNAL_LENGTH, COUNT);
+        polchrome(f_domain, bitmap, BLOCK_LEN, N_BLOCKS);
 
-        fft_postproc(f_domain, spec_bitmap, SIGNAL_LENGTH, COUNT);
+        fft_postproc(f_domain, spec_bitmap, BLOCK_LEN, N_BLOCKS);
 
 
         launch_cuda_kernel(bitmap);
@@ -79,7 +80,7 @@ int main(int argc, char **argv) {
         std::chrono::duration<double> elapsed = now - last_time;
         if (elapsed.count() >= 1.0) {
             printf("FPS: %d\n", frame_count);
-            printf("Max rate: %f MHz\n", float(frame_count) * float(SIGNAL_LENGTH) * float(COUNT) / 1e6f);
+            printf("Max rate: %f MHz\n", float(frame_count) * float(BLOCK_LEN) * float(N_BLOCKS) / 1e6f);
             frame_count = 0;
             last_time = now;
         }
