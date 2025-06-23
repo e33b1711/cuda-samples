@@ -10,9 +10,38 @@
 //TODO line interp
 
 
+__device__ uchar4 mapping(unsigned short hist_count, const int n_spec ){
+
+    assert(hist_count<=n_spec);
+
+    //0 => 0 0 0 0
+    if (hist_count==0) return uchar4(0,0,0,0);
+
+    // 1 => 0.0 / 0
+    // n_spec => 1.0 / 510
+    float color_index = log(hist_count) / log(n_spec);
+    int c_index = int(510.0 * color_index);
+
+    //index: 0-255
+    //       0-255
+    //       255-0
+    //       0
+    if(c_index<256){
+        return uchar(c_index, 255-c_index, 0, 0);
+    }
+    //index: 256-510
+    //       254-0
+    //       0
+    //       1-255
+    if(c_index<510){
+        return uchar(510-c_index, 0, c_index-255, 0);
+    }
+
+    return uchar(255, 255, 255, 0);
+}
 
 
-__global__ void polchrome_kernel(const float2* f_domain, unsigned short* hist, const short n_bins, const int n_spec) {
+__global__ void polchrome_kernel(const float2* f_domain, uchar4 *ptr, const short n_bins, const int n_spec) {
     //one block per bin
     //32 threads per block
     //we are heavly memory constricted
@@ -55,8 +84,12 @@ __global__ void polchrome_kernel(const float2* f_domain, unsigned short* hist, c
     }
 
     if (thread_idx == 0){
-       for(int h=0; h<height; h++) hist[bin_idx  + h * n_bins] = 20*(0.0 -log(float(hist_column[h]) / float(n_spec)));  
+       for(int h=0; h<height; h++) hist[bin_idx  + h * n_bins] = mapping(hist_column[h], n_spec);
     }
+
+    assert(mapping(0)==uchar4(0,0,0,0))
+    assert(mapping(1)==uchar4(0,1,0,0))
+    assert(mapping(n_spec)==uchar4(0,0,1,0))
 }
 
 void polchrome(float2* f_domain, unsigned short* hist, const int n_bins, const int n_spec){
@@ -86,7 +119,7 @@ void polchrome(float2* f_domain, unsigned short* hist, const int n_bins, const i
 }
 
 
-__global__ void fill_bitmap_spec(uchar4 *ptr, int width, int height, int frame, unsigned short* hist, int color, bool clear) {
+__global__ void fill_bitmap_spec(uchar4 *ptr, int width, int height, int frame, uchar4 *ptr, int color, bool clear) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     if (x >= width || y >= height) return;
@@ -96,5 +129,5 @@ __global__ void fill_bitmap_spec(uchar4 *ptr, int width, int height, int frame, 
         ptr[idx].z = 0;
         ptr[idx].y = 0;
         ptr[idx].w = 255;
-    
+
 }

@@ -10,7 +10,7 @@ __device__ float db_abs(float d_signal) {
     return 20.0f * log10(d_signal);
 }
 
-__global__ void fill_bitmap_spec(uchar4 *ptr, int width, int height, int frame, float* d_signal, int color, bool clear) {
+__global__ void fill_bitmap_spec(uchar4 *ptr, int width, int height, float* d_signal, int color, bool clear) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     if (x >= width || y >= height) return;

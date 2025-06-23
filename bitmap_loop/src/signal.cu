@@ -2,9 +2,10 @@
 #include <curand_kernel.h>
 #include <stdio.h>
 #include <assert.h>
-#include <cufft.h> // Add this include
+#include <cufft.h>
 
 #include "aux.h"
+#include "bitmap.h"
 
 __global__ void generatePhasorSignal(float2* signal, int length, float omega, float phi, float noiseVariance, unsigned long long seed) {
     curandState state;
@@ -106,7 +107,7 @@ __global__ void fft_detector(const float2* f_domain, float* f_max, float* f_min,
         float abs_v = sqrtf(fd.x * fd.x + fd.y * fd.y);
         max_v = max(max_v, abs_v);
         min_v = min(min_v, abs_v);
-        mean_v += abs_v; 
+        mean_v += abs_v;
 
         idx += n_bins*num_threads;
     }
@@ -134,18 +135,45 @@ __global__ void fft_detector(const float2* f_domain, float* f_max, float* f_min,
     }
 }
 
-void fft_postproc(float2* f_domain, float* f_max, float* f_min, float* f_mean, const int n_bins, const int n_spec){
+void fft_postproc(float2* f_domain, uchar4* bitmap, const int n_bins, const int n_spec, int width, int height){
     // Timing start
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     cudaEventRecord(start, 0);
 
+    static float* f_max = nullptr;
+    static float* f_min = nullptr;
+    static float* f_mean = nullptr;
+    static bool init = true;
+
+    if(init){
+        init = false;
+        CUDA_SAFE_CALL(cudaMalloc(&f_max, SIGNAL_LENGTH * COUNT * sizeof(float)));
+        CUDA_SAFE_CALL(cudaMalloc(&f_min, SIGNAL_LENGTH * COUNT * sizeof(float)));
+        CUDA_SAFE_CALL(cudaMalloc(&f_mean, SIGNAL_LENGTH * COUNT * sizeof(float)));
+    }
+
     const int blockSize = 1024;
     const int numBlocks = n_bins;
     fft_detector<<<numBlocks, blockSize>>>(f_domain, f_max, f_min, f_mean, n_bins, n_spec);
     CUDA_SAFE_CALL(cudaGetLastError());
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
+
+    <<<numBlocks, blockSize>>>fill_bitmap_spec(bitmap, width, height, f_max, 1, false);
+    CUDA_SAFE_CALL(cudaGetLastError());
+    CUDA_SAFE_CALL(cudaDeviceSynchronize());
+
+    <<<numBlocks, blockSize>>>fill_bitmap_spec(bitmap, width, height, f_min, 1, false);
+    CUDA_SAFE_CALL(cudaGetLastError());
+    CUDA_SAFE_CALL(cudaDeviceSynchronize());
+
+    const int blockSize = 1024;
+    const int numBlocks = n_bins;
+    <<<numBlocks, blockSize>>>fill_bitmap_spec(bitmap, width, height, f_mean, 1, false);
+    CUDA_SAFE_CALL(cudaGetLastError());
+    CUDA_SAFE_CALL(cudaDeviceSynchronize());
+
 
     // Timing end
     cudaEventRecord(stop, 0);
