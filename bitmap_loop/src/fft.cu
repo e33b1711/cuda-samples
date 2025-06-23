@@ -99,6 +99,18 @@ __device__ float db_abs(float d_signal) {
 }
 
 
+__device__ void line_interp(int* y_max, int* y_max, const float* d_signal, const int x, const int height, const float scale){
+    float abs_x_mid = db_abs(d_signal[x]);
+    float abs_x_left = (x>0)? db_abs(d_signal[x-1]) : abs_x_mid;
+    float abs_x_right = (x<width-1)? db_abs(d_signal[x+1]) : abs_x_mid;
+    int y_mid = int( scale * abs_x_mid + height/2);
+    int left_y = int( 0.5 * scale * (abs_x_left + abs_x_mid) + height/2);
+    int right_y = int( 0.5 * scale * (abs_x_right + abs_x_mid) + height/2);
+    y_max = max(max(left_y, y_mid),right_y);
+    y_min = min(min(left_y, y_mid),right_y);
+}
+
+
 __global__ void fill_bitmap_spec(uchar4 *ptr, int width, int height, float* d_signal, int color, bool clear) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -113,16 +125,8 @@ __global__ void fill_bitmap_spec(uchar4 *ptr, int width, int height, float* d_si
     }
 
     const float scale = 2.0f;
-
-    float abs_x_mid = db_abs(d_signal[x]);
-    float abs_x_left = (x>0)? db_abs(d_signal[x-1]) : abs_x_mid;
-    float abs_x_right = (x<width-1)? db_abs(d_signal[x+1]) : abs_x_mid;
-
-    int y_mid = int( scale * abs_x_mid + height/2);
-    int left_y = int( 0.5 * scale * (abs_x_left + abs_x_mid) + height/2);
-    int right_y = int( 0.5 * scale * (abs_x_right + abs_x_mid) + height/2);
-    int y_max = max(max(left_y, y_mid),right_y);
-    int y_min = min(min(left_y, y_mid),right_y);
+    int y_min, y_max;
+    line_interp(y_min, y_max, d_signal, x, height, scale);
 
     if (y <= y_max and y >= y_min){
         if (color==0) ptr[idx].x = 255;
