@@ -1,4 +1,4 @@
 #pragma once
 #include <cuda_runtime.h>
 
-void polchrome(float2* f_domain, unsigned uchar4* hist, const int n_bins, const int n_spec);
+void polchrome(float2* f_domain, uchar4* bitmap, const int block_len, const int n_blocks, const int width);

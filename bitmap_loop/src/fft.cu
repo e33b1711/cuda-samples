@@ -5,7 +5,6 @@
 #include <cufft.h>
 
 #include "aux.h"
-#include "bitmap.h"
 
 
 void run_fft(float2* t_domain, float2* f_domain, int length, int count) {
@@ -99,42 +98,38 @@ __device__ float db_abs(float d_signal) {
 }
 
 
-__device__ void line_interp(int* y_max, int* y_max, const float* d_signal, const int x, const int height, const float scale){
+__device__ void line_interp(int* y_min, int* y_max, const float* d_signal, const int x, const int height, const int width, const float scale){
     float abs_x_mid = db_abs(d_signal[x]);
     float abs_x_left = (x>0)? db_abs(d_signal[x-1]) : abs_x_mid;
     float abs_x_right = (x<width-1)? db_abs(d_signal[x+1]) : abs_x_mid;
     int y_mid = int( scale * abs_x_mid + height/2);
     int left_y = int( 0.5 * scale * (abs_x_left + abs_x_mid) + height/2);
     int right_y = int( 0.5 * scale * (abs_x_right + abs_x_mid) + height/2);
-    y_max = max(max(left_y, y_mid),right_y);
-    y_min = min(min(left_y, y_mid),right_y);
+    *y_max = max(max(left_y, y_mid),right_y);
+    *y_min = min(min(left_y, y_mid),right_y);
 }
 
 
-__global__ void fill_bitmap_spec(uchar4 *ptr, int width, int height, float* d_signal, int color, bool clear) {
+__global__ void fill_bitmap_spec(uchar4* ptr, int width, int height, float* d_signal, int color, bool clear) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     if (x >= width || y >= height) return;
     int idx = y * width + x;
 
-    if (clear){
-        ptr[idx].x = 0;
-        ptr[idx].y = 0;
-        ptr[idx].z = 0;
-        ptr[idx].w = 0;
-    }
+    if (clear) ptr[idx] = make_uchar4(0,0,0,0);
 
     const float scale = 2.0f;
     int y_min, y_max;
-    line_interp(y_min, y_max, d_signal, x, height, scale);
+    line_interp(&y_min, &y_max, d_signal, x, height, width, scale);
 
     if (y <= y_max and y >= y_min){
-        if (color==0) ptr[idx].x = 255;
-        if (color==1) ptr[idx].z = 255;
-        if (color==2) ptr[idx].y = 255;
+        if (color==0) ptr[idx] = make_uchar4(255,0,0,0);
+        if (color==1) ptr[idx] = make_uchar4(0,255,0,0);
+        if (color==2) ptr[idx] = make_uchar4(0,0,255,0);
+        if (color==3) ptr[idx] = make_uchar4(255,255,255,0);
     }
 }
-
+    
 
 void fft_postproc(float2* f_domain, uchar4* bitmap, const int block_len, const int n_blocks, int width, int height){
     // Timing start
@@ -156,22 +151,22 @@ void fft_postproc(float2* f_domain, uchar4* bitmap, const int block_len, const i
     }
 
     const int blockSize = 1024;
-    const int numBlocks = n_bins;
+    const int numBlocks = block_len;
     fft_detector<<<numBlocks, blockSize>>>(f_domain, f_max, f_min, f_mean, block_len, n_blocks);
     CUDA_SAFE_CALL(cudaGetLastError());
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
 
-    <<<numBlocks, blockSize>>>fill_bitmap_spec(bitmap, width, height, f_max, 1, false);
+    dim3 block(16, 16);
+    dim3 grid((width + block.x - 1) / block.x, (height + block.y - 1) / block.y);
+    fill_bitmap_spec<<<grid, block>>>(bitmap, width, height, f_max, 3, false);
     CUDA_SAFE_CALL(cudaGetLastError());
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
 
-    <<<numBlocks, blockSize>>>fill_bitmap_spec(bitmap, width, height, f_min, 1, false);
+    fill_bitmap_spec<<<grid, block>>>(bitmap, width, height, f_min, 3, false);
     CUDA_SAFE_CALL(cudaGetLastError());
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
 
-    const int blockSize = 1024;
-    const int numBlocks = n_bins;
-    <<<numBlocks, blockSize>>>fill_bitmap_spec(bitmap, width, height, f_mean, 1, false);
+    fill_bitmap_spec<<<grid, block>>>(bitmap, width, height, f_mean, 3, false);
     CUDA_SAFE_CALL(cudaGetLastError());
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
 

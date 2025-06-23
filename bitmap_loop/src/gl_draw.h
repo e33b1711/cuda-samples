@@ -5,6 +5,6 @@
 #include <cuda_gl_interop.h>
 #include <cuda_runtime.h>
 
-void draw_init(const int height, const int width);
+void draw_init(const int height, const int width, int argc, char **argv);
 void draw_cleanup();
 void draw_loop(uchar4* bitmap, const int width, const int height);

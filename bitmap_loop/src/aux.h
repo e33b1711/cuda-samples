@@ -1,5 +1,10 @@
 #pragma once
 
+#include <stdio.h>
+#include <stdlib.h>
+
+void time_info(const int block_len, const int n_blocks);
+
 #define CUDA_SAFE_CALL(call) do { \
     cudaError_t err = call; \
     if (err != cudaSuccess) { \
@@ -8,4 +13,4 @@
     } \
 } while (0)
 
-void time_info();
+

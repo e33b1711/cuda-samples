@@ -1,8 +1,9 @@
 #include "gl_draw.h"
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
-
 #include <stdio.h>
+
+#include "aux.h"
 
 
 cudaGraphicsResource *cuda_pbo_resource;
@@ -59,18 +60,18 @@ void drawGL(GLuint pbo, GLuint tex, int width, int height) {
 void dummy_display() {}
 
 
-void draw_init(const int height, const int width){
-    initGLUT(&argc, argv, cleanup, height, width);
-    glutDisplayFunc(dummy_display); // Register dummy display callback
-    initPixelBuffer(&pbo, &tex, &cuda_pbo_resource,);
-
-}
-
-
 void draw_cleanup() {
     cudaGraphicsUnregisterResource(cuda_pbo_resource);
     glDeleteBuffers(1, &pbo);
     glDeleteTextures(1, &tex);
+}
+
+
+void draw_init(const int height, const int width, int argc, char **argv){
+    initGLUT(&argc, argv, draw_cleanup, height, width);
+    glutDisplayFunc(dummy_display); // Register dummy display callback
+    initPixelBuffer(&pbo, &tex, &cuda_pbo_resource, height, width);
+
 }
 
 
@@ -80,9 +81,10 @@ void draw_loop(uchar4* bitmap, const int width, const int height){
     size_t num_bytes;
     CUDA_SAFE_CALL(cudaGraphicsMapResources(1, &cuda_pbo_resource, 0));
     CUDA_SAFE_CALL(cudaGraphicsResourceGetMappedPointer((void**)&dptr, &num_bytes, cuda_pbo_resource));
-    CUDA_SAFE_CALL(cudaDeviceSynchronize(cudaMemcopy(dptr, bitmap, WIDTH * HEIGHT * sizeof(uchar4))));
-    CUDA_SAFE_CALL(cudaGraphicsUnmapResources(1, &cuda_pbo_resource, WIDTH * HEIGHT * sizeof(uchar4)));
-    drawGL(pbo, tex, WIDTH, HEIGHT);
-
+    CUDA_SAFE_CALL(cudaMemcpy(dptr, bitmap, width * height * sizeof(uchar4), cudaMemcpyDeviceToDevice););
+    CUDA_SAFE_CALL(cudaDeviceSynchronize());
+    CUDA_SAFE_CALL(cudaGraphicsUnmapResources(1, &cuda_pbo_resource));
+    drawGL(pbo, tex, width, height);
+    
     glutMainLoopEvent();
 }

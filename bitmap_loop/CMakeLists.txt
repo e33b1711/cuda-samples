@@ -25,7 +25,7 @@ set(SOURCES
     src/fft.cu
     src/signal.cu
     src/main.cu
-    src/polycrome.cu
+    src/polychrome.cu
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})

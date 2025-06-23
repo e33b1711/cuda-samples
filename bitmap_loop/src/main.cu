@@ -1,7 +1,9 @@
 #include <cuda_runtime.h>
+#include <unistd.h>
 
 #include "gl_draw.h"
 #include "aux.h"
+#include "fft.h"
 #include "signal.h"
 #include "polychrome.h"
 
@@ -10,12 +12,12 @@ int main(int argc, char **argv) {
 
     const int BLOCK_LEN = 1024;
     const int N_BLOCKS = 1024*16;
-    const int WIDTH = SIGNAL_LENGTH;
+    const int WIDTH = BLOCK_LEN;
     const int HEIGHT = 512;
 
     int frame = 0;
 
-    draw_init(HEIGHT, WIDTH);
+    draw_init(HEIGHT, WIDTH, argc, argv);
 
     float2* t_domain = nullptr;
     float2* f_domain = nullptr;
@@ -28,10 +30,10 @@ int main(int argc, char **argv) {
 
         generate_signal(t_domain, 0.0f * float(frame), BLOCK_LEN*N_BLOCKS, frame);
         run_fft(t_domain, f_domain, BLOCK_LEN, N_BLOCKS);
-        polchrome(f_domain, bitmap, BLOCK_LEN, N_BLOCKS);
-        fft_postproc(f_domain, spec_bitmap, BLOCK_LEN, N_BLOCKS);
-        draw_loop(bitmap, WIDTH, HEIGHT)
-        time_info();
+        polchrome(f_domain, bitmap, BLOCK_LEN, N_BLOCKS, WIDTH);
+        fft_postproc(f_domain, bitmap, BLOCK_LEN, N_BLOCKS, WIDTH, HEIGHT);
+        draw_loop(bitmap, WIDTH, HEIGHT);
+        time_info(BLOCK_LEN, N_BLOCKS);
         frame++;
         //usleep(1e6);
     }
