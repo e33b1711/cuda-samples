@@ -26,7 +26,7 @@ __global__ void generatePhasorSignal(float2* signal, int length, float omega, fl
 }
 
 
-void generate_signal(float2* d_signal, const float phi, const int length, const int frame){
+void generate_signal(cudaStream_t stream, float2* d_signal, const float phi, const int length, const int frame){
     // Timing start
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
@@ -37,14 +37,12 @@ void generate_signal(float2* d_signal, const float phi, const int length, const 
     float omega = 0.1f * 3.14159265359f; // 5 cycles over the signal
     int numBlocks = 256;
     float noiseVariance = 0.5f;
-    generatePhasorSignal<<<numBlocks, blockSize>>>(d_signal, length, omega, phi, noiseVariance, (unsigned long long) frame, rand());
-    CUDA_SAFE_CALL(cudaGetLastError());
-    CUDA_SAFE_CALL(cudaDeviceSynchronize());
+    generatePhasorSignal<<<numBlocks, blockSize, 0, stream>>>(d_signal, length, omega, phi, noiseVariance, (unsigned long long) frame, rand());
 
 
     // Timing end
     cudaEventRecord(stop, 0);
-    cudaEventSynchronize(stop);
+    //cudaEventSynchronize(stop);
     float ms = 0.0f;
     cudaEventElapsedTime(&ms, start, stop);
     static int disp_count = 0;

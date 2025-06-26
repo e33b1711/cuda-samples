@@ -7,7 +7,7 @@
 #include "aux.h"
 
 
-void run_fft(float2* t_domain, float2* f_domain, int length, int count) {
+void run_fft(cudaStream_t stream, float2* t_domain, float2* f_domain, int length, int count) {
     static cufftHandle plan;
     static bool init = true;
     cufftResult result;
@@ -16,6 +16,7 @@ void run_fft(float2* t_domain, float2* f_domain, int length, int count) {
     if (init){
         result = cufftPlan1d(&plan, length, CUFFT_C2C, count);
         assert(result == CUFFT_SUCCESS);
+        cufftSetStream(plan, stream); // Associate the plan with the given stream
     }
 
      // Timing start
@@ -30,7 +31,7 @@ void run_fft(float2* t_domain, float2* f_domain, int length, int count) {
 
     // Timing end
     cudaEventRecord(stop, 0);
-    cudaEventSynchronize(stop);
+    //cudaEventSynchronize(stop);
     float ms = 0.0f;
     cudaEventElapsedTime(&ms, start, stop);
     static int disp_count = 0;
@@ -39,7 +40,7 @@ void run_fft(float2* t_domain, float2* f_domain, int length, int count) {
     // Cleanup
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
-    cufftDestroy(plan);
+    //cufftDestroy(plan);
 }
 
 
@@ -131,7 +132,7 @@ __global__ void fill_bitmap_spec(uchar4* ptr, int width, int height, float* d_si
 }
     
 
-void fft_postproc(float2* f_domain, uchar4* bitmap, const int block_len, const int n_blocks, int width, int height){
+void fft_postproc(cudaStream_t stream, float2* f_domain, uchar4* bitmap, const int block_len, const int n_blocks, int width, int height){
     // Timing start
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
@@ -152,13 +153,13 @@ void fft_postproc(float2* f_domain, uchar4* bitmap, const int block_len, const i
 
     const int blockSize = 1024;
     const int numBlocks = block_len;
-    fft_detector<<<numBlocks, blockSize>>>(f_domain, f_max, f_min, f_mean, block_len, n_blocks);
+    fft_detector<<<numBlocks, blockSize, 0, stream>>>(f_domain, f_max, f_min, f_mean, block_len, n_blocks);
     CUDA_SAFE_CALL(cudaGetLastError());
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
 
     dim3 block(16, 16);
     dim3 grid((width + block.x - 1) / block.x, (height + block.y - 1) / block.y);
-    fill_bitmap_spec<<<grid, block>>>(bitmap, width, height, f_max, 3, false);
+    fill_bitmap_spec<<<grid, block, 0, stream>>>(bitmap, width, height, f_max, 3, false);
     CUDA_SAFE_CALL(cudaGetLastError());
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
 

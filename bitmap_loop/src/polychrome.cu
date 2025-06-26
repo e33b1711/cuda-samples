@@ -127,7 +127,7 @@ __global__ void polchrome_kernel(const float2* f_domain, uchar4* bitmap, const s
 }
 
 
-void polchrome(float2* f_domain, uchar4* bitmap, const int block_len, const int n_blocks, const int width){
+void polchrome(cudaStream_t stream, float2* f_domain, uchar4* bitmap, const int block_len, const int n_blocks, const int width){
     // Timing start
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
@@ -136,9 +136,7 @@ void polchrome(float2* f_domain, uchar4* bitmap, const int block_len, const int 
 
     const int blockSize = 32;
     const int numBlocks = block_len;
-    polchrome_kernel<<<numBlocks, blockSize>>>(f_domain, bitmap, block_len, n_blocks, width);
-    CUDA_SAFE_CALL(cudaGetLastError());
-    CUDA_SAFE_CALL(cudaDeviceSynchronize());
+    polchrome_kernel<<<numBlocks, blockSize, 0, stream>>>(f_domain, bitmap, block_len, n_blocks, width);
 
     // Timing end
     cudaEventRecord(stop, 0);
