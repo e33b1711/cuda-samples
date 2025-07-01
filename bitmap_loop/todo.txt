@@ -1,14 +1,5 @@
-performance:
-( ) pipelining / parallel processing
-(x) fft performance
-(x) fft detector optimize
-(x) signal generation opti
-
-
-
-
-features:
+( ) more streams
 ( ) fft window
 ( ) fft overlap
-( ) polychrome
 ( ) transient signal / modulated signal
+( ) cufft hooks for fft detector/poly

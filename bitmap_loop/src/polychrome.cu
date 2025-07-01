@@ -128,25 +128,9 @@ __global__ void polchrome_kernel(const float2* f_domain, uchar4* bitmap, const s
 
 
 void polchrome(cudaStream_t stream, float2* f_domain, uchar4* bitmap, const int block_len, const int n_blocks, const int width){
-    // Timing start
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-    cudaEventRecord(start, 0);
-
+    
     const int blockSize = 32;
     const int numBlocks = block_len;
     polchrome_kernel<<<numBlocks, blockSize, 0, stream>>>(f_domain, bitmap, block_len, n_blocks, width);
 
-    // Timing end
-    cudaEventRecord(stop, 0);
-    cudaEventSynchronize(stop);
-    float ms = 0.0f;
-    cudaEventElapsedTime(&ms, start, stop);
-    static int disp_count = 0;
-    if((disp_count++)%100 == 0) printf("FFT postproc time: %.3f ms\n", ms);
-
-    // Cleanup
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
 }

@@ -17,30 +17,16 @@ void run_fft(cudaStream_t stream, float2* t_domain, float2* f_domain, int length
         result = cufftPlan1d(&plan, length, CUFFT_C2C, count);
         assert(result == CUFFT_SUCCESS);
         cufftSetStream(plan, stream); // Associate the plan with the given stream
+        init = false;
     }
 
-     // Timing start
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-    cudaEventRecord(start, 0);
+     
 
     // Execute FFT (forward transform)
     result = cufftExecC2C(plan, (cufftComplex*)t_domain, (cufftComplex*)f_domain, CUFFT_FORWARD);
     assert(result == CUFFT_SUCCESS);
 
-    // Timing end
-    cudaEventRecord(stop, 0);
-    //cudaEventSynchronize(stop);
-    float ms = 0.0f;
-    cudaEventElapsedTime(&ms, start, stop);
-    static int disp_count = 0;
-    if((disp_count++)%100 == 0) printf("FFT calculation time: %.3f ms\n", ms);
-
-    // Cleanup
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
-    //cufftDestroy(plan);
+    
 }
 
 
@@ -133,11 +119,7 @@ __global__ void fill_bitmap_spec(uchar4* ptr, int width, int height, float* d_si
     
 
 void fft_postproc(cudaStream_t stream, float2* f_domain, uchar4* bitmap, const int block_len, const int n_blocks, int width, int height){
-    // Timing start
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-    cudaEventRecord(start, 0);
+   
 
     static float* f_max = nullptr;
     static float* f_min = nullptr;
@@ -171,15 +153,4 @@ void fft_postproc(cudaStream_t stream, float2* f_domain, uchar4* bitmap, const i
     CUDA_SAFE_CALL(cudaGetLastError());
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
 
-    // Timing end
-    cudaEventRecord(stop, 0);
-    cudaEventSynchronize(stop);
-    float ms = 0.0f;
-    cudaEventElapsedTime(&ms, start, stop);
-    static int disp_count = 0;
-    if((disp_count++)%100 == 0) printf("FFT postproc time: %.3f ms\n", ms);
-
-    // Cleanup
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
 }
