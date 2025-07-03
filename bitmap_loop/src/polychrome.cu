@@ -63,33 +63,31 @@ __device__ void line_interp(int &y_max, int &y_min, const float2 *d_signal, cons
     y_min = min(min(left_y, y_mid), right_y);
 }
 
-__global__ void polchrome_kernel(const float2 *f_domain, uchar4 *bitmap, const short block_len, const int n_blocks, const int width)
+__global__ void polchrome_kernel(const float2 *f_domain, short *hist_unred, const short block_len, const int n_blocks, const int width, const int height)
 {
-    // one block per bin
-    // 32 threads per block
-    // we are heavly memory constricted
 
-    assert(gridDim.x == 1024);
-    assert(blockDim.x == 32);
+    const int num_blocks = gridDim.x;
+    const int num_threads = blockDim.x;
 
-    const int bin_idx = blockIdx.x;
-    const int thread_idx = threadIdx.x;
-    const int num_threads = 32;
-    const unsigned int height = 512;
+    assert(num_threads <= block_len);
 
-    __shared__ short hist_column[num_threads * height];
+    const int height_max = 512;
+    assert(height <= height_max);
+    short hist_column[height_max];
 
     for (int y_ind = 0; y_ind < height; y_ind++)
-        hist_column[thread_idx * height + y_ind] = 0;
+        hist_column[y_ind] = 0;
 
-    int idx = bin_idx + thread_idx * block_len;
-    int incs = 0;
-    while (idx < block_len * n_blocks)
+    const int thread_idx = threadIdx.x + blockIdx.x * num_threads;
+
+    int t_idx = thread_idx;
+
+    while (t_idx < block_len * n_blocks)
     {
 
         const float scale = 2.0f;
         int y_min, y_max;
-        line_interp(y_max, y_min, f_domain, idx, height, width, scale);
+        line_interp(y_max, y_min, f_domain, t_idx, height, width, scale);
 
         if (y_min < 0)
             y_min = 0;
@@ -99,57 +97,73 @@ __global__ void polchrome_kernel(const float2 *f_domain, uchar4 *bitmap, const s
             y_max = height;
         };
         if (y_min < height)
-            hist_column[thread_idx * height + y_min]++;
+            hist_column[y_min]++;
         if (y_max + 1 < height)
-            hist_column[thread_idx * height + y_max + 1]--;
+            hist_column[y_max + 1]--;
 
-        idx += num_threads * block_len;
-        incs++;
-    }
-    // printf("incs: %d \n", incs);
-
-    __syncthreads();
-
-    // collect cache fom threads / reduce
-
-    int i = num_threads / 2;
-    while (i != 0)
-    {
-        if (thread_idx < i)
-        {
-            for (int y_ind = 0; y_ind < height; y_ind++)
-                hist_column[thread_idx * height + y_ind] += hist_column[(thread_idx + i) * height + y_ind];
-        }
-        __syncthreads();
-        i /= 2;
+        t_idx += num_blocks * num_threads;
     }
 
-    // integrate
-    if (thread_idx == 0)
-    {
-        for (int h = 1; h < height; h++)
-        {
-            hist_column[h] += hist_column[h - 1];
-        }
-    }
-
-    // map
-    if (thread_idx == 0)
-    {
-        for (int h = 0; h < height; h++)
-            bitmap[bin_idx + h * block_len] = mapping(hist_column[h], n_blocks);
-    }
-
-    // TODO delete me!! Make proper unit tests
-    // assert(mapping(0)==uchar4(0,0,0,0));
-    // assert(mapping(1)==uchar4(0,1,0,0));
-    // assert(mapping(n_spec)==uchar4(0,0,1,0));
+    for (int y_ind = 0; y_ind < height; y_ind++)
+        hist_unred[thread_idx*height + y_ind] = hist_column[y_ind];
 }
 
-void polchrome(cudaStream_t stream, float2 *f_domain, uchar4 *bitmap, const int block_len, const int n_blocks, const int width)
+
+__global__ void polchrome_reduce(short* hist_unred, uchar4* bitmap, const int width_unred, const int width, const int height, const int n_blocks){
+
+    const int num_blocks = gridDim.x;
+    const int num_threads = blockDim.x;
+
+    assert(num_threads == width);
+
+    const int height_max = 512;
+    assert(height <= height_max);
+    short hist_column[height_max];
+
+    for (int y_ind = 0; y_ind < height; y_ind++)
+        hist_column[y_ind] = 0;
+
+    const int thread_idx = threadIdx.x + blockIdx.x * num_threads;
+
+    //reduce
+    for (int x_index =  thread_idx; x_index < width_unred; x_index+= width){
+        for (int y_ind = 0; y_ind < height; y_ind++)
+            hist_column[y_ind] += hist_unred[x_index*height + y_ind];
+    }
+
+    // integrate 
+    for (int h = 1; h < height; h++)
+    {
+        hist_column[h] += hist_column[h - 1];
+    }
+
+     // map
+    for (int h = 0; h < height; h++)
+        bitmap[thread_idx + h * width] = mapping(hist_column[h], n_blocks);
+}
+
+
+void polchrome(cudaStream_t stream, float2 *f_domain, uchar4 *bitmap, const int block_len, const int n_blocks, const int width, const int height)
 {
 
-    const int blockSize = 32;
-    const int numBlocks = block_len;
-    polchrome_kernel<<<numBlocks, blockSize, 0, stream>>>(f_domain, bitmap, block_len, n_blocks, width);
+
+
+
+    static short *hist_unred = nullptr;
+    static bool init = true;
+
+    const int numThreads = 512;
+    const int numBlocks = 64;
+    assert(numThreads < block_len);
+
+    if (init)
+    {
+        init = false;
+        CUDA_SAFE_CALL(cudaMalloc(&hist_unred, numThreads * numBlocks * height * sizeof(short)));
+    }
+
+
+
+    polchrome_kernel<<<numBlocks, numThreads, 0, stream>>>(f_domain, hist_unred, block_len, n_blocks, width, height);
+    polchrome_reduce<<<1, width, 0, stream>>>(hist_unred, bitmap, numThreads * numBlocks, width, height, n_blocks);
 }

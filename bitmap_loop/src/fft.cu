@@ -151,24 +151,15 @@ void fft_postproc(cudaStream_t stream, float2 *f_domain, uchar4 *bitmap, const i
     }
 
     fft_detector<<<numBlocks, numThreads, 0, stream>>>(f_domain, f_max, f_min, f_mean, block_len, n_blocks);
-    CUDA_SAFE_CALL(cudaGetLastError());
-    CUDA_SAFE_CALL(cudaDeviceSynchronize());
 
     fft_detector_reduce<<<1, block_len, 0, stream>>>(f_max, f_min, f_mean, block_len, numThreads * numBlocks);
-    CUDA_SAFE_CALL(cudaGetLastError());
-    CUDA_SAFE_CALL(cudaDeviceSynchronize());
 
     dim3 block(16, 16);
     dim3 grid((width + block.x - 1) / block.x, (height + block.y - 1) / block.y);
-    fill_bitmap_spec<<<grid, block, 0, stream>>>(bitmap, width, height, f_max, 3, true);
-    CUDA_SAFE_CALL(cudaGetLastError());
-    CUDA_SAFE_CALL(cudaDeviceSynchronize());
+    fill_bitmap_spec<<<grid, block, 0, stream>>>(bitmap, width, height, f_max, 3, false);
 
     fill_bitmap_spec<<<grid, block>>>(bitmap, width, height, f_min, 3, false);
-    CUDA_SAFE_CALL(cudaGetLastError());
-    CUDA_SAFE_CALL(cudaDeviceSynchronize());
 
     fill_bitmap_spec<<<grid, block>>>(bitmap, width, height, f_mean, 3, false);
-    CUDA_SAFE_CALL(cudaGetLastError());
-    CUDA_SAFE_CALL(cudaDeviceSynchronize());
+
 }
