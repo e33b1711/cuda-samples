@@ -29,55 +29,60 @@ void run_fft(cudaStream_t stream, float2 *t_domain, float2 *f_domain, int length
 __global__ void fft_detector(const float2 *f_domain, float *f_max, float *f_min, float *f_mean, const int block_len, const int n_blocks)
 {
 
-    const int bin_idx = blockIdx.x;
-    const int thread_idx = threadIdx.x;
+    const int num_blocks = gridDim.x;
     const int num_threads = blockDim.x;
-    const int num_threads_max = 1024;
-    assert(num_threads <= num_threads_max);
 
-    __shared__ float max_cache[num_threads_max];
-    __shared__ float min_cache[num_threads_max];
-    __shared__ float mean_cache[num_threads_max];
+    assert(num_threads <= block_len);
+    //todo reduce if threads > bins
+
+
+    const int thread_idx = threadIdx.x + blockIdx.x*num_threads;
+
 
     float max_v = -1e99f;
     float min_v = 1e99f;
     float mean_v = 0.0f;
-    int idx = bin_idx + thread_idx * block_len;
-    while (idx < block_len * n_blocks)
+ 
+    int t_idx = thread_idx;
+    while (t_idx < block_len * n_blocks)
     {
-        float2 fd = f_domain[idx];
+        float2 fd = f_domain[t_idx];
         float abs_v = sqrtf(fd.x * fd.x + fd.y * fd.y);
         max_v = max(max_v, abs_v);
         min_v = min(min_v, abs_v);
         mean_v += abs_v;
 
-        idx += block_len * num_threads;
-    }
-    max_cache[thread_idx] = max_v;
-    min_cache[thread_idx] = min_v;
-    mean_cache[thread_idx] = mean_v;
-
-    __syncthreads();
-
-    int i = num_threads / 2;
-    while (i != 0)
-    {
-        if (thread_idx < i)
-        {
-            max_cache[thread_idx] = max(max_cache[thread_idx], max_cache[thread_idx + i]);
-            min_cache[thread_idx] = min(min_cache[thread_idx], min_cache[thread_idx + i]);
-            mean_cache[thread_idx] += mean_cache[thread_idx + i];
-        }
-        __syncthreads();
-        i /= 2;
+        t_idx += num_blocks * num_threads;
     }
 
-    if (thread_idx == 0)
-    {
-        f_max[bin_idx] = max_cache[0];
-        f_min[bin_idx] = min_cache[0];
-        f_mean[bin_idx] = mean_cache[0] / n_blocks;
+    f_max[thread_idx] = max_v;
+    f_min[thread_idx] = min_v;
+    f_mean[thread_idx] = mean_v / n_blocks;
+    
+}
+
+
+__global__ void fft_detector_reduce(float *f_max, float *f_min, float *f_mean, const int block_len, const int n_threads)
+{
+    assert(gridDim.x == 1);
+    assert(blockDim.x == block_len);
+
+    float max_v = -1e99f;
+    float min_v = 1e99f;
+    float mean_v = 0.0f;
+
+
+    for(int i = threadIdx.x; i< n_threads; i+=block_len){
+        max_v = max(max_v, f_max[i]);
+        min_v = min(min_v, f_min[i]);
+        mean_v += f_mean[i];
     }
+
+    f_max[threadIdx.x] = max_v;
+    //f_min[threadIdx.x] = min_v;
+    f_mean[threadIdx.x] = mean_v;
+
+  
 }
 
 __device__ float db_abs(float d_signal)
@@ -133,23 +138,29 @@ void fft_postproc(cudaStream_t stream, float2 *f_domain, uchar4 *bitmap, const i
     static float *f_mean = nullptr;
     static bool init = true;
 
+    const int numThreads = 512;
+    const int numBlocks = 64;
+    assert(numThreads < block_len);
+
     if (init)
     {
         init = false;
-        CUDA_SAFE_CALL(cudaMalloc(&f_max, block_len * n_blocks * sizeof(float)));
-        CUDA_SAFE_CALL(cudaMalloc(&f_min, block_len * n_blocks * sizeof(float)));
-        CUDA_SAFE_CALL(cudaMalloc(&f_mean, block_len * n_blocks * sizeof(float)));
+        CUDA_SAFE_CALL(cudaMalloc(&f_max, numThreads * numBlocks * sizeof(float)));
+        CUDA_SAFE_CALL(cudaMalloc(&f_min, numThreads * numBlocks * sizeof(float)));
+        CUDA_SAFE_CALL(cudaMalloc(&f_mean, numThreads * numBlocks * sizeof(float)));
     }
 
-    const int blockSize = 1024;
-    const int numBlocks = block_len;
-    fft_detector<<<numBlocks, blockSize, 0, stream>>>(f_domain, f_max, f_min, f_mean, block_len, n_blocks);
+    fft_detector<<<numBlocks, numThreads, 0, stream>>>(f_domain, f_max, f_min, f_mean, block_len, n_blocks);
+    CUDA_SAFE_CALL(cudaGetLastError());
+    CUDA_SAFE_CALL(cudaDeviceSynchronize());
+
+    fft_detector_reduce<<<1, block_len, 0, stream>>>(f_max, f_min, f_mean, block_len, numThreads * numBlocks);
     CUDA_SAFE_CALL(cudaGetLastError());
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
 
     dim3 block(16, 16);
     dim3 grid((width + block.x - 1) / block.x, (height + block.y - 1) / block.y);
-    fill_bitmap_spec<<<grid, block, 0, stream>>>(bitmap, width, height, f_max, 3, false);
+    fill_bitmap_spec<<<grid, block, 0, stream>>>(bitmap, width, height, f_max, 3, true);
     CUDA_SAFE_CALL(cudaGetLastError());
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
 

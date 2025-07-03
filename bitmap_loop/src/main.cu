@@ -78,7 +78,7 @@ int main(int argc, char **argv)
 
         cudaEventRecord(dsp_start, stream_dsp);
         run_fft(stream_dsp, t_domain_dsp, f_domain, BLOCK_LEN, N_BLOCKS);
-        polchrome(stream_dsp, f_domain, bitmap, BLOCK_LEN, N_BLOCKS, WIDTH);
+        //polchrome(stream_dsp, f_domain, bitmap, BLOCK_LEN, N_BLOCKS, WIDTH);
         fft_postproc(stream_dsp, f_domain, bitmap, BLOCK_LEN, N_BLOCKS, WIDTH, HEIGHT);
         cudaEventRecord(dsp_stop, stream_dsp);
 
