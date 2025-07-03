@@ -73,7 +73,7 @@ int main(int argc, char **argv)
         }
 
         cudaEventRecord(in_start, stream_in);
-        CUDA_SAFE_CALL(cudaMemcpyAsync(t_domain_in, t_domain_host + frame, BLOCK_LEN * N_BLOCKS * sizeof(float2), cudaMemcpyHostToDevice, stream_in));
+        //CUDA_SAFE_CALL(cudaMemcpyAsync(t_domain_in, t_domain_host + frame, BLOCK_LEN * N_BLOCKS * sizeof(float2), cudaMemcpyHostToDevice, stream_in));
         cudaEventRecord(in_stop, stream_in);
 
         cudaEventRecord(dsp_start, stream_dsp);

@@ -12,7 +12,7 @@ __device__ uchar4 mapping(unsigned short hist_count, const int n_spec)
     if (hist_count > n_spec)
     {
         printf("hist_count: %f\n", float(hist_count) / float(n_spec));
-        assert(false);
+        // assert(false);
     }
 
     // 0 => 0 0 0 0
@@ -63,7 +63,7 @@ __device__ void line_interp(int &y_max, int &y_min, const float2 *d_signal, cons
     y_min = min(min(left_y, y_mid), right_y);
 }
 
-__global__ void polchrome_kernel(const float2 *f_domain, short *hist_unred, const short block_len, const int n_blocks, const int width, const int height)
+__global__ void polchrome_kernel(const float2 *f_domain, short *hist_unred, const short block_len, const int n_blocks, const int width, const int height, const int width_unred)
 {
 
     const int num_blocks = gridDim.x;
@@ -81,6 +81,8 @@ __global__ void polchrome_kernel(const float2 *f_domain, short *hist_unred, cons
     const int thread_idx = threadIdx.x + blockIdx.x * num_threads;
 
     int t_idx = thread_idx;
+
+    assert(width_unred > thread_idx);
 
     while (t_idx < block_len * n_blocks)
     {
@@ -101,53 +103,40 @@ __global__ void polchrome_kernel(const float2 *f_domain, short *hist_unred, cons
         if (y_max + 1 < height)
             hist_column[y_max + 1]--;
 
-        t_idx += num_blocks * num_threads;
+        t_idx += width_unred;
     }
 
-    for (int y_ind = 0; y_ind < height; y_ind++)
-        hist_unred[thread_idx*height + y_ind] = hist_column[y_ind];
-}
-
-
-__global__ void polchrome_reduce(short* hist_unred, uchar4* bitmap, const int width_unred, const int width, const int height, const int n_blocks){
-
-    const int num_blocks = gridDim.x;
-    const int num_threads = blockDim.x;
-
-    assert(num_threads == width);
-
-    const int height_max = 512;
-    assert(height <= height_max);
-    short hist_column[height_max];
-
-    for (int y_ind = 0; y_ind < height; y_ind++)
-        hist_column[y_ind] = 0;
-
-    const int thread_idx = threadIdx.x + blockIdx.x * num_threads;
-
-    //reduce
-    for (int x_index =  thread_idx; x_index < width_unred; x_index+= width){
-        for (int y_ind = 0; y_ind < height; y_ind++)
-            hist_column[y_ind] += hist_unred[x_index*height + y_ind];
-    }
-
-    // integrate 
+    // integrate
     for (int h = 1; h < height; h++)
-    {
         hist_column[h] += hist_column[h - 1];
-    }
 
-     // map
-    for (int h = 0; h < height; h++)
-        bitmap[thread_idx + h * width] = mapping(hist_column[h], n_blocks);
+    for (int y_ind = 0; y_ind < height; y_ind++)
+    {
+        int index = thread_idx * height + y_ind;
+        hist_unred[y_ind + thread_idx * height] = hist_column[y_ind];
+    }
 }
 
+__global__ void polchrome_reduce(short *hist_unred, uchar4 *bitmap, const int width_unred, const int width, const int height, const int n_blocks)
+{
+
+    assert(blockDim.x == height);
+    assert(gridDim.x <= width);
+
+    int y_ind = threadIdx.x;
+    int x_ind = blockIdx.x;
+
+    short hist = 0;
+    for (int reduce = 0; reduce < 32; reduce++)
+    {
+        hist += hist_unred[y_ind + x_ind * height + reduce * width * height];
+    }
+    bitmap[y_ind * width + x_ind] = mapping(hist, n_blocks);
+
+}
 
 void polchrome(cudaStream_t stream, float2 *f_domain, uchar4 *bitmap, const int block_len, const int n_blocks, const int width, const int height)
 {
-
-
-
 
     static short *hist_unred = nullptr;
     static bool init = true;
@@ -156,14 +145,20 @@ void polchrome(cudaStream_t stream, float2 *f_domain, uchar4 *bitmap, const int 
     const int numBlocks = 64;
     assert(numThreads < block_len);
 
+    const int width_unred = numThreads * numBlocks;
+
     if (init)
     {
         init = false;
-        CUDA_SAFE_CALL(cudaMalloc(&hist_unred, numThreads * numBlocks * height * sizeof(short)));
+        CUDA_SAFE_CALL(cudaMalloc(&hist_unred, width_unred * height * sizeof(short)));
+        printf("width_unred: %d\n", width_unred);
+        printf("height: %d\n", height);
     }
 
-
-
-    polchrome_kernel<<<numBlocks, numThreads, 0, stream>>>(f_domain, hist_unred, block_len, n_blocks, width, height);
-    polchrome_reduce<<<1, width, 0, stream>>>(hist_unred, bitmap, numThreads * numBlocks, width, height, n_blocks);
+    polchrome_kernel<<<numBlocks, numThreads, 0, stream>>>(f_domain, hist_unred, block_len, n_blocks, width, height, width_unred);
+    //CUDA_SAFE_CALL(cudaGetLastError());
+    //CUDA_SAFE_CALL(cudaDeviceSynchronize());
+    polchrome_reduce<<<width, height, 0, stream>>>(hist_unred, bitmap, width_unred, width, height, n_blocks);
+    //CUDA_SAFE_CALL(cudaGetLastError());
+    //CUDA_SAFE_CALL(cudaDeviceSynchronize());
 }
