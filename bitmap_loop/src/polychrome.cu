@@ -17,7 +17,7 @@ __device__ uchar4 mapping(unsigned short hist_count, const int n_spec, uchar4 ol
 
     // 0 => 0 0 0 0
     if (hist_count == 0)
-        return make_uchar4(old.x*0.99, old.y*0.99, old.z*0.99, 0);
+        return make_uchar4(old.x * 0.99, old.y * 0.99, old.z * 0.99, 0);
 
     // 1 => 0.0 / 0
     // n_spec => 1.0 / 510
@@ -66,7 +66,6 @@ __device__ void line_interp(int &y_max, int &y_min, const float2 *d_signal, cons
 __global__ void polchrome_kernel(const float2 *f_domain, short *hist_unred, const short block_len, const int n_blocks, const int width, const int height, const int width_unred)
 {
 
-    const int num_blocks = gridDim.x;
     const int num_threads = blockDim.x;
 
     assert(num_threads <= block_len);
@@ -106,13 +105,11 @@ __global__ void polchrome_kernel(const float2 *f_domain, short *hist_unred, cons
     }
 
     // integrate
-    for (int h = 1; h < height; h++)
-        hist_column[h] += hist_column[h - 1];
-
-    for (int y_ind = 0; y_ind < height; y_ind++)
-    {
-        int index = thread_idx * height + y_ind;
-        hist_unred[y_ind + thread_idx * height] = hist_column[y_ind];
+        
+    short accu = 0;
+    for (int y_ind = 0; y_ind < height; y_ind++){
+        accu += hist_column[y_ind];
+        hist_unred[y_ind + thread_idx * height] = accu;
     }
 }
 
@@ -161,5 +158,5 @@ void polchrome(cudaStream_t stream, float2 *f_domain, uchar4 *bitmap, const int 
     polchrome_reduce<<<width, height, 0, stream>>>(hist_unred, internal_bitmap, width_unred, width, height, n_blocks);
     // CUDA_SAFE_CALL(cudaGetLastError());
     // CUDA_SAFE_CALL(cudaDeviceSynchronize());
-    CUDA_SAFE_CALL(cudaMemcpyAsync(bitmap, internal_bitmap, width*height* sizeof(uchar4), cudaMemcpyDeviceToDevice, stream));
+    CUDA_SAFE_CALL(cudaMemcpyAsync(bitmap, internal_bitmap, width * height * sizeof(uchar4), cudaMemcpyDeviceToDevice, stream));
 }
