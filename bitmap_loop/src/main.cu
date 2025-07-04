@@ -73,11 +73,14 @@ int main(int argc, char **argv)
         }
 
         cudaEventRecord(in_start, stream_in);
-        //CUDA_SAFE_CALL(cudaMemcpyAsync(t_domain_in, t_domain_host + frame, BLOCK_LEN * N_BLOCKS * sizeof(float2), cudaMemcpyHostToDevice, stream_in));
+        CUDA_SAFE_CALL(cudaMemcpyAsync(t_domain_in, t_domain_host + frame, BLOCK_LEN * N_BLOCKS * sizeof(float2), cudaMemcpyHostToDevice, stream_in));
         cudaEventRecord(in_stop, stream_in);
 
         cudaEventRecord(dsp_start, stream_dsp);
         run_fft(stream_dsp, t_domain_dsp, f_domain, BLOCK_LEN, N_BLOCKS);
+        float2 value; value.x = 1272.9; value.y = 2827.0;
+        if (rand()%1000 < 20)
+        inject_spike(stream_dsp, f_domain, BLOCK_LEN, N_BLOCKS, value,  34, rand()%BLOCK_LEN);
         polchrome(stream_dsp, f_domain, bitmap, BLOCK_LEN, N_BLOCKS, WIDTH, HEIGHT);
         fft_postproc(stream_dsp, f_domain, bitmap, BLOCK_LEN, N_BLOCKS, WIDTH, HEIGHT);
         cudaEventRecord(dsp_stop, stream_dsp);
@@ -85,7 +88,7 @@ int main(int argc, char **argv)
         draw_loop(bitmap, WIDTH, HEIGHT);
         time_info(BLOCK_LEN, N_BLOCKS);
         frame++;
-        // usleep(1e6);
+        //usleep(1e6);
 
         // Timing end
         cudaEventSynchronize(dsp_stop);

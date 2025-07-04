@@ -27,6 +27,15 @@ __global__ void generatePhasorSignal(float2 *signal, int length, float omega, fl
     }
 }
 
+__global__ void inject(float2 *signal, int block_len, int n_blocks, float2 value, int repetions, int index)
+{
+    int rep = 0;
+    for(int ind=index; ind<n_blocks*block_len; ind += block_len){
+        signal[ind] = value;
+        if ((rep++) >= repetions) break;
+    }
+}
+
 void generate_signal(cudaStream_t stream, float2 *d_signal, const float phi, const int length, const int frame)
 {
 
@@ -35,4 +44,9 @@ void generate_signal(cudaStream_t stream, float2 *d_signal, const float phi, con
     int numBlocks = 256;
     float noiseVariance = 0.5f;
     generatePhasorSignal<<<numBlocks, blockSize, 0, stream>>>(d_signal, length, omega, phi, noiseVariance, (unsigned long long)frame, rand());
+}
+
+void inject_spike(cudaStream_t stream, float2* f_domain, const int block_len, const int n_blocks, float2 value, int repetetions, int index){
+    
+    inject<<<1, 1, 0, stream>>>(f_domain, block_len, n_blocks, value, repetetions, index);
 }

@@ -79,7 +79,7 @@ __global__ void fft_detector_reduce(float *f_max, float *f_min, float *f_mean, c
     }
 
     f_max[threadIdx.x] = max_v;
-    //f_min[threadIdx.x] = min_v;
+    f_min[threadIdx.x] = min_v;
     f_mean[threadIdx.x] = mean_v;
 
   
