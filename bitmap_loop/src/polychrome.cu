@@ -79,11 +79,9 @@ __global__ void polchrome_kernel(const float2 *f_domain, short *hist_unred, cons
 
     const int thread_idx = threadIdx.x + blockIdx.x * num_threads;
 
-    int t_idx = thread_idx;
-
     assert(width_unred > thread_idx);
 
-    while (t_idx < block_len * n_blocks)
+    for (int t_idx = thread_idx; t_idx < block_len * n_blocks; t_idx += width_unred)
     {
 
         const float scale = 2.0f;
@@ -99,13 +97,10 @@ __global__ void polchrome_kernel(const float2 *f_domain, short *hist_unred, cons
             hist_column[y_min]++;
 
         if (y_max + 1 < height)
-            hist_column[y_max + 1]--;
-
-        t_idx += width_unred;
+            hist_column[y_max + 1]--; 
     }
 
     // integrate
-        
     short accu = 0;
     for (int y_ind = 0; y_ind < height; y_ind++){
         accu += hist_column[y_ind];
@@ -113,7 +108,7 @@ __global__ void polchrome_kernel(const float2 *f_domain, short *hist_unred, cons
     }
 }
 
-__global__ void polchrome_reduce(short *hist_unred, uchar4 *bitmap, const int width_unred, const int width, const int height, const int n_blocks)
+__global__ void polchrome_reduce(short *hist_unred, uchar4 *bitmap, const int width_unred, const int width, const int height, const int n_blocks, const int reduce)
 {
 
     assert(blockDim.x == height);
@@ -123,9 +118,9 @@ __global__ void polchrome_reduce(short *hist_unred, uchar4 *bitmap, const int wi
     int x_ind = blockIdx.x;
 
     short hist = 0;
-    for (int reduce = 0; reduce < 32; reduce++)
+    for (int red = 0; red < reduce; red++)
     {
-        hist += hist_unred[y_ind + x_ind * height + reduce * width * height];
+        hist += hist_unred[y_ind + x_ind * height + red * width * height];
     }
     bitmap[y_ind * width + x_ind] = mapping(hist, n_blocks, bitmap[y_ind * width + x_ind]);
 }
@@ -139,23 +134,28 @@ void polchrome(cudaStream_t stream, float2 *f_domain, uchar4 *bitmap, const int 
 
     const int numThreads = 512;
     const int numBlocks = 64;
-    assert(numThreads < block_len);
+    assert(numThreads <= block_len);
+    assert(block_len % numThreads == 0);
 
     const int width_unred = numThreads * numBlocks;
+    const int reduce = numThreads * numBlocks / block_len;
 
     if (init)
     {
         init = false;
         CUDA_SAFE_CALL(cudaMalloc(&hist_unred, width_unred * height * sizeof(short)));
         CUDA_SAFE_CALL(cudaMalloc(&internal_bitmap, width * height * sizeof(uchar4)));
+        printf("init polychrome\n");
         printf("width_unred: %d\n", width_unred);
+        printf("width: %d\n", width);
+        printf("reduce: %d\n", reduce);
         printf("height: %d\n", height);
     }
 
     polchrome_kernel<<<numBlocks, numThreads, 0, stream>>>(f_domain, hist_unred, block_len, n_blocks, width, height, width_unred);
     // CUDA_SAFE_CALL(cudaGetLastError());
     // CUDA_SAFE_CALL(cudaDeviceSynchronize());
-    polchrome_reduce<<<width, height, 0, stream>>>(hist_unred, internal_bitmap, width_unred, width, height, n_blocks);
+    polchrome_reduce<<<width, height, 0, stream>>>(hist_unred, internal_bitmap, width_unred, width, height, n_blocks, reduce);
     // CUDA_SAFE_CALL(cudaGetLastError());
     // CUDA_SAFE_CALL(cudaDeviceSynchronize());
     CUDA_SAFE_CALL(cudaMemcpyAsync(bitmap, internal_bitmap, width * height * sizeof(uchar4), cudaMemcpyDeviceToDevice, stream));
