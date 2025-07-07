@@ -125,7 +125,7 @@ __global__ void polchrome_reduce(short *hist_unred, uchar4 *bitmap, const ps par
     bitmap[y_ind * params.width + x_ind] = mapping(hist, params.n_blocks, bitmap[y_ind * params.width + x_ind]);
 }
 
-void polchrome(cudaStream_t stream, float2 *f_domain, uchar4 *bitmap, const ps params)
+void polchrome(cudaStream_t stream, float2 *f_domain, uchar4 *bitmap, const ps params, bool clear)
 {
 
     static short *hist_unred = nullptr;
@@ -139,6 +139,13 @@ void polchrome(cudaStream_t stream, float2 *f_domain, uchar4 *bitmap, const ps p
 
     const int width_unred = numThreads * numBlocks;
     const int reduce = numThreads * numBlocks / params.block_len;
+
+    if (clear){
+        init = true;
+        CUDA_SAFE_CALL(cudaFree(hist_unred));
+        CUDA_SAFE_CALL(cudaFree(internal_bitmap));
+        return;
+    } 
 
     if (init)
     {

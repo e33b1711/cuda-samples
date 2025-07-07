@@ -55,6 +55,7 @@ float2 *init_host_signal(ps params)
     CUDA_SAFE_CALL(cudaMalloc(&t_domain, 2 * params.block_len * params.n_blocks * sizeof(float2)));
     generate_signal(t_domain, 2 * params.block_len * params.n_blocks);
     CUDA_SAFE_CALL(cudaMemcpy(t_domain_host, t_domain, 2 * params.block_len * params.n_blocks * sizeof(float2), cudaMemcpyDeviceToHost));
+    CUDA_SAFE_CALL(cudaFree(t_domain));
     return t_domain_host;
 }
 
@@ -67,10 +68,19 @@ void handle_input(context ctx, float2 *t_domain_host, ps params)
     cudaEventRecord(ctx.stop, ctx.stream);
 }
 
-void handle_dsp(context ctx, ps params)
+void handle_dsp(context ctx, ps params, bool clear)
 {
+
+    if (clear)
+    {
+        run_fft(ctx.stream, ctx.t_domain, ctx.f_domain, params, true);
+        polchrome(ctx.stream, ctx.f_domain, ctx.bitmap, params, true);
+        fft_postproc(ctx.stream, ctx.f_domain, ctx.bitmap, params, true);
+        return;
+    }
+
     cudaEventRecord(ctx.start, ctx.stream);
-    run_fft(ctx.stream, ctx.t_domain, ctx.f_domain, params);
+    run_fft(ctx.stream, ctx.t_domain, ctx.f_domain, params, false);
     float2 value;
     value.x = float(rand() % 1000) / 0.01;
     value.y = float(rand() % 1000) / 0.01;
@@ -79,29 +89,28 @@ void handle_dsp(context ctx, ps params)
         size_t offset_s = rand() % params.block_len;
         inject_spike(ctx.stream, ctx.f_domain, params.block_len, params.n_blocks, value, 34, offset_s);
     }
-    polchrome(ctx.stream, ctx.f_domain, ctx.bitmap, params);
-    fft_postproc(ctx.stream, ctx.f_domain, ctx.bitmap, params);
+    polchrome(ctx.stream, ctx.f_domain, ctx.bitmap, params, false);
+    fft_postproc(ctx.stream, ctx.f_domain, ctx.bitmap, params, false);
     cudaEventRecord(ctx.stop, ctx.stream);
 }
 
-void sync(context &ping, context &pong)
-{ 
-    cudaEventSynchronize(ping.stop);
-    cudaEventSynchronize(pong.stop);
+void sync(context &ctx)
+{
+    cudaEventSynchronize(ctx.stop);
     float ms = 0.0f;
-    cudaEventElapsedTime(&ms, pong.start, pong.stop);
-    static int disp_count = 0;
-    if ((disp_count) % 100 == 0)
-        printf("DSP time: %.3f ms\n", ms);
-    cudaEventElapsedTime(&ms, ping.start, ping.stop);
-    if ((disp_count) % 100 == 0)
-        printf("IN time: %.3f ms\n", ms);
-    cudaEventElapsedTime(&ms, ping.start, ping.stop);
-    if ((disp_count++) % 100 == 0)
-        printf("IN2DSP time: %.3f ms\n", ms);
+    cudaEventElapsedTime(&ms, ctx.start, ctx.stop);
+    CUDA_SAFE_CALL(cudaStreamSynchronize(ctx.stream));
+}
 
-    CUDA_SAFE_CALL(cudaStreamSynchronize(ping.stream));
-    CUDA_SAFE_CALL(cudaStreamSynchronize(pong.stream));
+void destroy(context &ctx)
+{
+    CUDA_SAFE_CALL(cudaEventDestroy(ctx.start));
+    CUDA_SAFE_CALL(cudaEventDestroy(ctx.stop));
+    CUDA_SAFE_CALL(cudaStreamDestroy(ctx.stream));
+    CUDA_SAFE_CALL(cudaFree(ctx.t_domain));
+    CUDA_SAFE_CALL(cudaFree(ctx.f_domain));
+    CUDA_SAFE_CALL(cudaFree(ctx.bitmap));
+    CUDA_SAFE_CALL(cudaFreeHost(ctx.bitmap_host));
 }
 
 int main(int argc, char **argv)
@@ -117,30 +126,61 @@ int main(int argc, char **argv)
     int frame = 0;
 
     context ping, pong;
+    float2 *t_domain_host;
 
     init(ping, params);
     init(pong, params);
 
-    float2 *t_domain_host = init_host_signal(params);
+    t_domain_host = init_host_signal(params);
 
-    while (frame<500)
+    while (frame < 200)
     {
 
         switch_context(ping, pong);
         handle_input(ping, t_domain_host, params);
-        handle_dsp(pong, params);
+        handle_dsp(pong, params, false);
         time_info(params.block_len, params.n_blocks);
         frame++;
         drawImage(pong.bitmap_host, params);
-        sync(ping, pong);
+        sync(ping);
+        sync(pong);
     }
 
     // Cleanup
-    cudaEventDestroy(ping.start);
-    cudaEventDestroy(ping.stop);
-    cudaEventDestroy(pong.start);
-    cudaEventDestroy(pong.stop);
+    destroy(ping);
+    destroy(pong);
+    CUDA_SAFE_CALL(cudaFreeHost(t_domain_host));
+    handle_dsp(pong, params, true);
 
-    // draw_cleanup();
+    params.block_len = 1024;
+    params.n_blocks = 16 * 1024;
+    params.width = 1024;
+    params.height = 256;
+    params.scale = 2.0f;
+
+    init(ping, params);
+    init(pong, params);
+
+    t_domain_host = init_host_signal(params);
+    frame = 0;
+
+    while (frame < 200)
+    {
+
+        switch_context(ping, pong);
+        handle_input(ping, t_domain_host, params);
+        handle_dsp(pong, params, false);
+        time_info(params.block_len, params.n_blocks);
+        frame++;
+        drawImage(pong.bitmap_host, params);
+        sync(ping);
+        sync(pong);
+    }
+
+    // Cleanup
+    destroy(ping);
+    destroy(pong);
+    CUDA_SAFE_CALL(cudaFreeHost(t_domain_host));
+
     return 0;
 }

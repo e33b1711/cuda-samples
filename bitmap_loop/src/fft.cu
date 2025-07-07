@@ -7,11 +7,16 @@
 #include "aux.h"
 #include "params.h"
 
-void run_fft(cudaStream_t stream, float2 *t_domain, float2 *f_domain, const ps params)
+void run_fft(cudaStream_t stream, float2 *t_domain, float2 *f_domain, const ps params, bool clear)
 {
     static cufftHandle plan;
     static bool init = true;
     cufftResult result;
+
+    if (clear){
+        init = true;
+        return;
+    } 
 
     // Create a 1D FFT plan for complex-to-complex (single precision)
     if (init)
@@ -130,7 +135,7 @@ __global__ void fill_bitmap_spec(uchar4 *ptr, const ps params, float *d_signal, 
     }
 }
 
-void fft_postproc(cudaStream_t stream, float2 *f_domain, uchar4 *bitmap, const ps params)
+void fft_postproc(cudaStream_t stream, float2 *f_domain, uchar4 *bitmap, const ps params, bool clear)
 {
 
     static float *f_max = nullptr;
@@ -141,6 +146,14 @@ void fft_postproc(cudaStream_t stream, float2 *f_domain, uchar4 *bitmap, const p
     const int numThreads = 512;
     const int numBlocks = 64;
     assert(numThreads < params.block_len);
+
+    if (clear){
+        init = true;
+        CUDA_SAFE_CALL(cudaFree(f_max));
+        CUDA_SAFE_CALL(cudaFree(f_min));
+        CUDA_SAFE_CALL(cudaFree(f_mean));
+        return;
+    } 
 
     if (init)
     {
