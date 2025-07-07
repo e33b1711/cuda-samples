@@ -6,7 +6,7 @@
 
 #include "aux.h"
 
-__global__ void generatePhasorSignal(float2 *signal, int length, float omega, float phi, float noiseVariance, unsigned long long seed, int spike_index)
+__global__ void generatePhasorSignal(float2 *signal, int length, float omega, float noiseVariance, unsigned long long seed, int spike_index)
 {
     curandState state;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -36,19 +36,18 @@ __global__ void inject(float2 *signal, int block_len, int n_blocks, float2 value
     }
 }
 
-void generate_signal(cudaStream_t stream, float2 *d_signal, const float phi, const int length, const int frame)
+void generate_signal(float2 *d_signal, const int length)
 {
 
     int blockSize = 256;
     float omega = 0.1f * 3.14159265359f; // 5 cycles over the signal
     int numBlocks = 256;
     float noiseVariance = 0.5f;
-    generatePhasorSignal<<<numBlocks, blockSize, 0, stream>>>(d_signal, length, omega, phi, noiseVariance, (unsigned long long)frame, rand());
+    generatePhasorSignal<<<numBlocks, blockSize>>>(d_signal, length, omega, noiseVariance, 3434, rand());
     CUDA_SAFE_CALL(cudaGetLastError());
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
 }
 
 void inject_spike(cudaStream_t stream, float2* f_domain, const int block_len, const int n_blocks, float2 value, int repetetions, int index){
-    
     inject<<<1, 1, 0, stream>>>(f_domain, block_len, n_blocks, value, repetetions, index);
 }
