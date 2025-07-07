@@ -1,7 +1,7 @@
 #include <cuda_runtime.h>
 #include <unistd.h>
 
-#include "gl_draw.h"
+#include "draw.h"
 #include "aux.h"
 #include "fft.h"
 #include "signal.h"
@@ -17,7 +17,7 @@ int main(int argc, char **argv)
 
     int frame = 0;
 
-    draw_init(HEIGHT, WIDTH, argc, argv);
+    //draw_init(HEIGHT, WIDTH, argc, argv);
 
     cudaStream_t stream_in, stream_dsp;
     CUDA_SAFE_CALL(cudaStreamCreate(&stream_in));
@@ -29,15 +29,23 @@ int main(int argc, char **argv)
     float2 *t_domain_host = nullptr;
 
     float2 *f_domain = nullptr;
-    uchar4 *bitmap = nullptr;
+    uchar4 *bitmap_ping = nullptr;
+    uchar4 *bitmap_pong = nullptr;
+
+    uchar4 *bitmap_host_ping = nullptr;
+    uchar4 *bitmap_host_pong = nullptr;
+    CUDA_SAFE_CALL(cudaHostAlloc((void **)&bitmap_host_ping, WIDTH * HEIGHT * sizeof(uchar4), cudaHostAllocDefault)); 
+    CUDA_SAFE_CALL(cudaHostAlloc((void **)&bitmap_host_pong, WIDTH * HEIGHT * sizeof(uchar4), cudaHostAllocDefault)); 
 
     CUDA_SAFE_CALL(cudaMalloc(&t_domain_ping, BLOCK_LEN * N_BLOCKS * sizeof(float2)));
     CUDA_SAFE_CALL(cudaMalloc(&t_domain_pong, BLOCK_LEN * N_BLOCKS * sizeof(float2)));
 
-    CUDA_SAFE_CALL(cudaHostAlloc((void **)&t_domain_host, 2 * BLOCK_LEN * N_BLOCKS * sizeof(float2), cudaHostAllocDefault));
+    CUDA_SAFE_CALL(cudaHostAlloc((void **)&t_domain_host, 2 * BLOCK_LEN * N_BLOCKS * sizeof(float2), cudaHostAllocMapped));
 
     CUDA_SAFE_CALL(cudaMalloc(&f_domain, BLOCK_LEN * N_BLOCKS * sizeof(float2)));
-    CUDA_SAFE_CALL(cudaMalloc(&bitmap, WIDTH * HEIGHT * sizeof(uchar4)));
+    CUDA_SAFE_CALL(cudaMalloc(&bitmap_ping, WIDTH * HEIGHT * sizeof(uchar4)));
+    CUDA_SAFE_CALL(cudaMalloc(&bitmap_pong, WIDTH * HEIGHT * sizeof(uchar4)));
+
 
     for (int offset = 0; offset < 2; offset++)
     {
@@ -61,19 +69,32 @@ int main(int argc, char **argv)
         size_t offset_s = rand() % BLOCK_LEN * N_BLOCKS;
         float2 *t_domain_in = nullptr;
         float2 *t_domain_dsp = nullptr;
+        uchar4 *bitmap_dsp = nullptr;
+        uchar4 *bitmap_in = nullptr;
+        uchar4 *bitmap_host_dsp = nullptr;
+        uchar4 *bitmap_host_cp = nullptr;
         if (frame % 2 == 0)
         {
             t_domain_in = t_domain_pong;
             t_domain_dsp = t_domain_ping;
+            bitmap_in = bitmap_pong;
+            bitmap_dsp = bitmap_ping;
+            bitmap_host_dsp = bitmap_host_ping;
+            bitmap_host_cp = bitmap_host_pong;
         }
         else
         {
             t_domain_in = t_domain_ping;
-            t_domain_dsp = t_domain_ping;
+            t_domain_dsp = t_domain_pong;
+            bitmap_in = bitmap_ping;
+            bitmap_dsp = bitmap_pong;
+            bitmap_host_dsp = bitmap_host_pong;
+            bitmap_host_cp = bitmap_host_ping;
         }
 
         cudaEventRecord(in_start, stream_in);
-        CUDA_SAFE_CALL(cudaMemcpyAsync(t_domain_in, t_domain_host + frame, BLOCK_LEN * N_BLOCKS * sizeof(float2), cudaMemcpyHostToDevice, stream_in));
+        CUDA_SAFE_CALL(cudaMemcpyAsync(t_domain_in, t_domain_host + rand()%(BLOCK_LEN * N_BLOCKS), BLOCK_LEN * N_BLOCKS * sizeof(float2), cudaMemcpyHostToDevice, stream_in));
+        CUDA_SAFE_CALL(cudaMemcpyAsync(bitmap_host_cp, bitmap_in, WIDTH * HEIGHT * sizeof(uchar4), cudaMemcpyDeviceToHost, stream_in));
         cudaEventRecord(in_stop, stream_in);
 
         cudaEventRecord(dsp_start, stream_dsp);
@@ -81,14 +102,15 @@ int main(int argc, char **argv)
         float2 value; value.x = 1272.9; value.y = 2827.0;
         if (rand()%1000 < 20)
         inject_spike(stream_dsp, f_domain, BLOCK_LEN, N_BLOCKS, value,  34, rand()%BLOCK_LEN);
-        polchrome(stream_dsp, f_domain, bitmap, BLOCK_LEN, N_BLOCKS, WIDTH, HEIGHT);
-        fft_postproc(stream_dsp, f_domain, bitmap, BLOCK_LEN, N_BLOCKS, WIDTH, HEIGHT);
+        polchrome(stream_dsp, f_domain, bitmap_dsp, BLOCK_LEN, N_BLOCKS, WIDTH, HEIGHT);
+        fft_postproc(stream_dsp, f_domain, bitmap_dsp, BLOCK_LEN, N_BLOCKS, WIDTH, HEIGHT);
         cudaEventRecord(dsp_stop, stream_dsp);
 
-        draw_loop(bitmap, WIDTH, HEIGHT);
+       
         time_info(BLOCK_LEN, N_BLOCKS);
         frame++;
         //usleep(1e6);
+        drawImage(bitmap_host_dsp, WIDTH, HEIGHT);
 
         // Timing end
         cudaEventSynchronize(dsp_stop);
@@ -107,6 +129,9 @@ int main(int argc, char **argv)
 
         CUDA_SAFE_CALL(cudaStreamSynchronize(stream_dsp));
         CUDA_SAFE_CALL(cudaStreamSynchronize(stream_in));
+
+
+  
     }
 
     // Cleanup
@@ -115,6 +140,6 @@ int main(int argc, char **argv)
     cudaEventDestroy(in_start);
     cudaEventDestroy(in_stop);
 
-    draw_cleanup();
+    //draw_cleanup();
     return 0;
 }

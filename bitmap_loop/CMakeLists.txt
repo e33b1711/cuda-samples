@@ -10,18 +10,20 @@ find_package(CUDA REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(GLUT REQUIRED)
 find_package(GLEW REQUIRED)
+find_package(OpenCV REQUIRED)
 
 include_directories(
     ${CUDA_INCLUDE_DIRS}
     ${OPENGL_INCLUDE_DIR}
     ${GLUT_INCLUDE_DIR}
     ${GLEW_INCLUDE_DIRS}
+    ${CAIRO_INCLUDE_DIRS}
     src
 )
 
 set(SOURCES
     src/aux.cu
-    src/gl_draw.cu
+    src/draw.cu
     src/fft.cu
     src/signal.cu
     src/main.cu
@@ -35,6 +37,7 @@ target_link_libraries(cuda_glut_bitmap
     ${OPENGL_LIBRARIES}
     ${GLUT_LIBRARIES}
     ${GLEW_LIBRARIES}
+    ${OpenCV_LIBS}
     GL
     GLU
     glut
