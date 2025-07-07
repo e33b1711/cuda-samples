@@ -7,28 +7,22 @@
 #include "aux.h"
 #include "params.h"
 
-void run_fft(cudaStream_t stream, float2 *t_domain, float2 *f_domain, const ps params, bool clear)
+void run_fft(const context ctx, const ps params)
 {
     static cufftHandle plan;
-    static bool init = true;
     cufftResult result;
 
-    if (clear){
-        init = true;
-        return;
-    } 
-
     // Create a 1D FFT plan for complex-to-complex (single precision)
-    if (init)
+    if (ctx.init)
     {
+        printf("Init fft.\n");
         result = cufftPlan1d(&plan, params.block_len, CUFFT_C2C, params.n_blocks);
         assert(result == CUFFT_SUCCESS);
-        cufftSetStream(plan, stream); // Associate the plan with the given stream
-        init = false;
+        cufftSetStream(plan, ctx.stream); // Associate the plan with the given stream
     }
 
     // Execute FFT (forward transform)
-    result = cufftExecC2C(plan, (cufftComplex *)t_domain, (cufftComplex *)f_domain, CUFFT_FORWARD);
+    result = cufftExecC2C(plan, (cufftComplex *)ctx.t_domain, (cufftComplex *)ctx.f_domain, CUFFT_FORWARD);
     assert(result == CUFFT_SUCCESS);
 }
 
@@ -39,18 +33,16 @@ __global__ void fft_detector(const float2 *f_domain, float *f_max, float *f_min,
     const int num_threads = blockDim.x;
 
     assert(num_threads <= params.block_len);
-    //todo reduce if threads > bins
+    // todo reduce if threads > bins
 
-
-    const int thread_idx = threadIdx.x + blockIdx.x*num_threads;
-
+    const int thread_idx = threadIdx.x + blockIdx.x * num_threads;
 
     float max_v = -1e99f;
     float min_v = 1e99f;
     float mean_v = 0.0f;
- 
+
     int t_idx = thread_idx;
-    while (t_idx < params.block_len *  params.n_blocks)
+    while (t_idx < params.block_len * params.n_blocks)
     {
         float2 fd = f_domain[t_idx];
         float abs_v = sqrtf(fd.x * fd.x + fd.y * fd.y);
@@ -64,9 +56,7 @@ __global__ void fft_detector(const float2 *f_domain, float *f_max, float *f_min,
     f_max[thread_idx] = max_v;
     f_min[thread_idx] = min_v;
     f_mean[thread_idx] = mean_v / params.n_blocks;
-    
 }
-
 
 __global__ void fft_detector_reduce(float *f_max, float *f_min, float *f_mean, const ps params, const int n_threads)
 {
@@ -77,8 +67,8 @@ __global__ void fft_detector_reduce(float *f_max, float *f_min, float *f_mean, c
     float min_v = 1e99f;
     float mean_v = 0.0f;
 
-
-    for(int i = threadIdx.x; i< n_threads; i+=params.block_len){
+    for (int i = threadIdx.x; i < n_threads; i += params.block_len)
+    {
         max_v = max(max_v, f_max[i]);
         min_v = min(min_v, f_min[i]);
         mean_v += f_mean[i];
@@ -87,8 +77,6 @@ __global__ void fft_detector_reduce(float *f_max, float *f_min, float *f_mean, c
     f_max[threadIdx.x] = max_v;
     f_min[threadIdx.x] = min_v;
     f_mean[threadIdx.x] = mean_v;
-
-  
 }
 
 __device__ float db_abs(float d_signal)
@@ -135,44 +123,32 @@ __global__ void fill_bitmap_spec(uchar4 *ptr, const ps params, float *d_signal, 
     }
 }
 
-void fft_postproc(cudaStream_t stream, float2 *f_domain, uchar4 *bitmap, const ps params, bool clear)
+void fft_postproc(const context ctx, const ps params)
 {
-
     static float *f_max = nullptr;
     static float *f_min = nullptr;
     static float *f_mean = nullptr;
-    static bool init = true;
 
     const int numThreads = 512;
     const int numBlocks = 64;
     assert(numThreads < params.block_len);
 
-    if (clear){
-        init = true;
-        CUDA_SAFE_CALL(cudaFree(f_max));
-        CUDA_SAFE_CALL(cudaFree(f_min));
-        CUDA_SAFE_CALL(cudaFree(f_mean));
-        return;
-    } 
-
-    if (init)
+    if (ctx.init)
     {
-        init = false;
         CUDA_SAFE_CALL(cudaMalloc(&f_max, numThreads * numBlocks * sizeof(float)));
         CUDA_SAFE_CALL(cudaMalloc(&f_min, numThreads * numBlocks * sizeof(float)));
         CUDA_SAFE_CALL(cudaMalloc(&f_mean, numThreads * numBlocks * sizeof(float)));
     }
 
-    fft_detector<<<numBlocks, numThreads, 0, stream>>>(f_domain, f_max, f_min, f_mean, params);
+    fft_detector<<<numBlocks, numThreads, 0, ctx.stream>>>(ctx.f_domain, f_max, f_min, f_mean, params);
 
-    fft_detector_reduce<<<1, params.block_len, 0, stream>>>(f_max, f_min, f_mean, params, numThreads * numBlocks);
+    fft_detector_reduce<<<1, params.block_len, 0, ctx.stream>>>(f_max, f_min, f_mean, params, numThreads * numBlocks);
 
     dim3 block(16, 16);
     dim3 grid((params.width + block.x - 1) / block.x, (params.height + block.y - 1) / block.y);
-    fill_bitmap_spec<<<grid, block, 0, stream>>>(bitmap, params, f_max, 3, false);
+    fill_bitmap_spec<<<grid, block, 0, ctx.stream>>>(ctx.bitmap, params, f_max, 3, false);
 
-    fill_bitmap_spec<<<grid, block>>>(bitmap, params, f_min, 3, false);
+    fill_bitmap_spec<<<grid, block, 0, ctx.stream>>>(ctx.bitmap, params, f_min, 3, false);
 
-    fill_bitmap_spec<<<grid, block>>>(bitmap, params, f_mean, 3, false);
-
+    fill_bitmap_spec<<<grid, block, 0, ctx.stream>>>(ctx.bitmap, params, f_mean, 3, false);
 }

@@ -125,12 +125,11 @@ __global__ void polchrome_reduce(short *hist_unred, uchar4 *bitmap, const ps par
     bitmap[y_ind * params.width + x_ind] = mapping(hist, params.n_blocks, bitmap[y_ind * params.width + x_ind]);
 }
 
-void polchrome(cudaStream_t stream, float2 *f_domain, uchar4 *bitmap, const ps params, bool clear)
+void polchrome(const context ctx, const ps params)
 {
 
     static short *hist_unred = nullptr;
     static uchar4 *internal_bitmap = nullptr;
-    static bool init = true;
 
     const int numThreads = 512;
     const int numBlocks = 64;
@@ -140,16 +139,10 @@ void polchrome(cudaStream_t stream, float2 *f_domain, uchar4 *bitmap, const ps p
     const int width_unred = numThreads * numBlocks;
     const int reduce = numThreads * numBlocks / params.block_len;
 
-    if (clear){
-        init = true;
+    if (ctx.init)
+    {
         CUDA_SAFE_CALL(cudaFree(hist_unred));
         CUDA_SAFE_CALL(cudaFree(internal_bitmap));
-        return;
-    } 
-
-    if (init)
-    {
-        init = false;
         CUDA_SAFE_CALL(cudaMalloc(&hist_unred, width_unred * params.height * sizeof(short)));
         CUDA_SAFE_CALL(cudaMalloc(&internal_bitmap, params.width * params.height * sizeof(uchar4)));
         printf("init polychrome\n");
@@ -159,11 +152,11 @@ void polchrome(cudaStream_t stream, float2 *f_domain, uchar4 *bitmap, const ps p
         printf("height: %d\n", params.height);
     }
 
-    polchrome_kernel<<<numBlocks, numThreads, 0, stream>>>(f_domain, hist_unred, params, width_unred);
+    polchrome_kernel<<<numBlocks, numThreads, 0, ctx.stream>>>(ctx.f_domain, hist_unred, params, width_unred);
     // CUDA_SAFE_CALL(cudaGetLastError());
     // CUDA_SAFE_CALL(cudaDeviceSynchronize());
-    polchrome_reduce<<<params.width, params.height, 0, stream>>>(hist_unred, internal_bitmap, params, width_unred, reduce);
+    polchrome_reduce<<<params.width, params.height, 0, ctx.stream>>>(hist_unred, internal_bitmap, params, width_unred, reduce);
     // CUDA_SAFE_CALL(cudaGetLastError());
     // CUDA_SAFE_CALL(cudaDeviceSynchronize());
-    CUDA_SAFE_CALL(cudaMemcpyAsync(bitmap, internal_bitmap, params.width * params.height * sizeof(uchar4), cudaMemcpyDeviceToDevice, stream));
+    CUDA_SAFE_CALL(cudaMemcpyAsync(ctx.bitmap, internal_bitmap, params.width * params.height * sizeof(uchar4), cudaMemcpyDeviceToDevice, ctx.stream));
 }

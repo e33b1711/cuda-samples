@@ -1,4 +1,5 @@
 #pragma once
 #include <cuda_runtime.h>
+#include "params.h"
 
-void polchrome(cudaStream_t stream, float2 *f_domain, uchar4 *bitmap, const ps params, bool clear);
+void polchrome(const context ctx, const ps params);

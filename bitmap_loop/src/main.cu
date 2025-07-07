@@ -8,18 +8,6 @@
 #include "polychrome.h"
 #include "params.h"
 
-struct context
-{
-    cudaStream_t stream;
-    cudaEvent_t start;
-    cudaEvent_t stop;
-    //
-    float2 *t_domain = nullptr;
-    uchar4 *bitmap = nullptr;
-    uchar4 *bitmap_host = nullptr;
-    float2 *f_domain = nullptr;
-};
-
 void init(context &ctx, const ps params)
 {
     CUDA_SAFE_CALL(cudaStreamCreate(&ctx.stream));
@@ -29,6 +17,7 @@ void init(context &ctx, const ps params)
     CUDA_SAFE_CALL(cudaMalloc(&ctx.f_domain, params.block_len * params.n_blocks * sizeof(float2)));
     CUDA_SAFE_CALL(cudaEventCreate(&ctx.start));
     CUDA_SAFE_CALL(cudaEventCreate(&ctx.stop));
+    ctx.init = true;
 }
 
 void switch_context(context &ping, context &pong)
@@ -44,6 +33,9 @@ void switch_context(context &ping, context &pong)
     pong.bitmap = temp.bitmap;
     pong.bitmap_host = temp.bitmap_host;
     pong.f_domain = temp.f_domain;
+
+    ping.init = false;
+    pong.init = false;
 }
 
 float2 *init_host_signal(ps params)
@@ -68,19 +60,10 @@ void handle_input(context ctx, float2 *t_domain_host, ps params)
     cudaEventRecord(ctx.stop, ctx.stream);
 }
 
-void handle_dsp(context ctx, ps params, bool clear)
+void handle_dsp(context ctx, ps params)
 {
-
-    if (clear)
-    {
-        run_fft(ctx.stream, ctx.t_domain, ctx.f_domain, params, true);
-        polchrome(ctx.stream, ctx.f_domain, ctx.bitmap, params, true);
-        fft_postproc(ctx.stream, ctx.f_domain, ctx.bitmap, params, true);
-        return;
-    }
-
     cudaEventRecord(ctx.start, ctx.stream);
-    run_fft(ctx.stream, ctx.t_domain, ctx.f_domain, params, false);
+    run_fft(ctx, params);
     float2 value;
     value.x = float(rand() % 1000) / 0.01;
     value.y = float(rand() % 1000) / 0.01;
@@ -89,8 +72,8 @@ void handle_dsp(context ctx, ps params, bool clear)
         size_t offset_s = rand() % params.block_len;
         inject_spike(ctx.stream, ctx.f_domain, params.block_len, params.n_blocks, value, 34, offset_s);
     }
-    polchrome(ctx.stream, ctx.f_domain, ctx.bitmap, params, false);
-    fft_postproc(ctx.stream, ctx.f_domain, ctx.bitmap, params, false);
+    polchrome(ctx, params);
+    fft_postproc(ctx, params);
     cudaEventRecord(ctx.stop, ctx.stream);
 }
 
@@ -113,16 +96,21 @@ void destroy(context &ctx)
     CUDA_SAFE_CALL(cudaFreeHost(ctx.bitmap_host));
 }
 
+void loop(context &ping, context &pong, ps params, float2 *t_domain_host)
+{
+    handle_input(ping, t_domain_host, params);
+    handle_dsp(pong, params);
+    time_info(params.block_len, params.n_blocks);
+    drawImage(pong.bitmap_host, params);
+    sync(ping);
+    sync(pong);
+    switch_context(ping, pong);
+}
+
 int main(int argc, char **argv)
 {
 
     ps params;
-    params.block_len = 1024;
-    params.n_blocks = 16 * 1024;
-    params.width = 1024;
-    params.height = 512;
-    params.scale = 2.0f;
-
     int frame = 0;
 
     context ping, pong;
@@ -130,34 +118,23 @@ int main(int argc, char **argv)
 
     init(ping, params);
     init(pong, params);
-
     t_domain_host = init_host_signal(params);
 
     while (frame < 200)
     {
-
-        switch_context(ping, pong);
-        handle_input(ping, t_domain_host, params);
-        handle_dsp(pong, params, false);
-        time_info(params.block_len, params.n_blocks);
+        loop(ping, pong, params, t_domain_host);
         frame++;
-        drawImage(pong.bitmap_host, params);
-        sync(ping);
-        sync(pong);
     }
 
     // Cleanup
     destroy(ping);
     destroy(pong);
     CUDA_SAFE_CALL(cudaFreeHost(t_domain_host));
-    handle_dsp(pong, params, true);
 
-    params.block_len = 1024;
-    params.n_blocks = 16 * 1024;
-    params.width = 1024;
-    params.height = 256;
-    params.scale = 2.0f;
 
+    params.n_blocks = 8 * 1024;
+    params.block_len = 2048;
+    params.width = 2048;
     init(ping, params);
     init(pong, params);
 
@@ -166,15 +143,8 @@ int main(int argc, char **argv)
 
     while (frame < 200)
     {
-
-        switch_context(ping, pong);
-        handle_input(ping, t_domain_host, params);
-        handle_dsp(pong, params, false);
-        time_info(params.block_len, params.n_blocks);
+        loop(ping, pong, params, t_domain_host);
         frame++;
-        drawImage(pong.bitmap_host, params);
-        sync(ping);
-        sync(pong);
     }
 
     // Cleanup

@@ -3,5 +3,5 @@
 
 #include "params.h"
 
-void run_fft(cudaStream_t stream, float2 *t_domain, float2 *f_domain, const ps params, bool clear);
-void fft_postproc(cudaStream_t stream, float2 *f_domain, uchar4 *bitmap, const ps params, bool clear);
+void run_fft(const context ctx, const ps params);
+void fft_postproc(const context ctx, const ps params);
