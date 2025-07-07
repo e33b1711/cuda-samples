@@ -15,7 +15,7 @@ __global__ void generatePhasorSignal(float2 *signal, int length, float omega, fl
     {
         float noiseReal = curand_normal(&state) * noiseVariance;
         float noiseImag = curand_normal(&state) * noiseVariance;
-        float angle = omega * idx + phi;
+        float angle = omega * idx;
         signal[idx].x = cosf(angle) + noiseReal; // Real part
         signal[idx].y = sinf(angle) + noiseImag; // Imaginary part
         if (idx == (spike_index % length))
@@ -44,6 +44,8 @@ void generate_signal(cudaStream_t stream, float2 *d_signal, const float phi, con
     int numBlocks = 256;
     float noiseVariance = 0.5f;
     generatePhasorSignal<<<numBlocks, blockSize, 0, stream>>>(d_signal, length, omega, phi, noiseVariance, (unsigned long long)frame, rand());
+    CUDA_SAFE_CALL(cudaGetLastError());
+    CUDA_SAFE_CALL(cudaDeviceSynchronize());
 }
 
 void inject_spike(cudaStream_t stream, float2* f_domain, const int block_len, const int n_blocks, float2 value, int repetetions, int index){

@@ -5,6 +5,7 @@
 
 #include "aux.h"
 #include "fft.h"
+#include "params.h"
 
 __device__ uchar4 mapping(unsigned short hist_count, const int n_spec, uchar4 old)
 {
@@ -51,68 +52,67 @@ __device__ float db_abs(float2 fd)
     return 20.0f * log10(sqrtf(fd.x * fd.x + fd.y * fd.y));
 }
 
-__device__ void line_interp(int &y_max, int &y_min, const float2 *d_signal, const int x, const int height, const int width, const float scale)
+__device__ void line_interp(int &y_max, int &y_min, const float2 *d_signal, const int x, const ps params)
 {
     float abs_x_mid = db_abs(d_signal[x]);
     float abs_x_left = (x > 0) ? db_abs(d_signal[x - 1]) : abs_x_mid;
-    float abs_x_right = (x < width - 1) ? db_abs(d_signal[x + 1]) : abs_x_mid;
-    int y_mid = int(scale * abs_x_mid + height / 2);
-    int left_y = int(0.5 * scale * (abs_x_left + abs_x_mid) + height / 2);
-    int right_y = int(0.5 * scale * (abs_x_right + abs_x_mid) + height / 2);
+    float abs_x_right = (x < params.width - 1) ? db_abs(d_signal[x + 1]) : abs_x_mid;
+    int y_mid = int(params.scale * abs_x_mid + params.height / 2);
+    int left_y = int(0.5 * params.scale * (abs_x_left + abs_x_mid) + params.height / 2);
+    int right_y = int(0.5 * params.scale * (abs_x_right + abs_x_mid) + params.height / 2);
     y_max = max(max(left_y, y_mid), right_y);
     y_min = min(min(left_y, y_mid), right_y);
 }
 
-__global__ void polchrome_kernel(const float2 *f_domain, short *hist_unred, const short block_len, const int n_blocks, const int width, const int height, const int width_unred)
+__global__ void polchrome_kernel(const float2 *f_domain, short *hist_unred, const ps params, const int width_unred)
 {
 
     const int num_threads = blockDim.x;
 
-    assert(num_threads <= block_len);
+    assert(num_threads <= params.block_len);
 
     const int height_max = 512;
-    assert(height <= height_max);
+    assert(params.height <= height_max);
     short hist_column[height_max];
 
-    for (int y_ind = 0; y_ind < height; y_ind++)
+    for (int y_ind = 0; y_ind < params.height; y_ind++)
         hist_column[y_ind] = 0;
 
     const int thread_idx = threadIdx.x + blockIdx.x * num_threads;
 
     assert(width_unred > thread_idx);
 
-    for (int t_idx = thread_idx; t_idx < block_len * n_blocks; t_idx += width_unred)
+    for (int t_idx = thread_idx; t_idx < params.block_len * params.n_blocks; t_idx += width_unred)
     {
 
-        const float scale = 2.0f;
         int y_min, y_max;
-        line_interp(y_max, y_min, f_domain, t_idx, height, width, scale);
+        line_interp(y_max, y_min, f_domain, t_idx, params);
 
         if (y_min < 0)
             y_min = 0;
         if (y_max < 0)
             continue;
 
-        if (y_min < height)
+        if (y_min < params.height)
             hist_column[y_min]++;
 
-        if (y_max + 1 < height)
+        if (y_max + 1 < params.height)
             hist_column[y_max + 1]--; 
     }
 
     // integrate
     short accu = 0;
-    for (int y_ind = 0; y_ind < height; y_ind++){
+    for (int y_ind = 0; y_ind < params.height; y_ind++){
         accu += hist_column[y_ind];
-        hist_unred[y_ind + thread_idx * height] = accu;
+        hist_unred[y_ind + thread_idx * params.height] = accu;
     }
 }
 
-__global__ void polchrome_reduce(short *hist_unred, uchar4 *bitmap, const int width_unred, const int width, const int height, const int n_blocks, const int reduce)
+__global__ void polchrome_reduce(short *hist_unred, uchar4 *bitmap, const ps params, const int width_unred, const int reduce)
 {
 
-    assert(blockDim.x == height);
-    assert(gridDim.x <= width);
+    assert(blockDim.x == params.height);
+    assert(gridDim.x <= params.width);
 
     int y_ind = threadIdx.x;
     int x_ind = blockIdx.x;
@@ -120,12 +120,12 @@ __global__ void polchrome_reduce(short *hist_unred, uchar4 *bitmap, const int wi
     short hist = 0;
     for (int red = 0; red < reduce; red++)
     {
-        hist += hist_unred[y_ind + x_ind * height + red * width * height];
+        hist += hist_unred[y_ind + x_ind * params.height + red * params.width * params.height];
     }
-    bitmap[y_ind * width + x_ind] = mapping(hist, n_blocks, bitmap[y_ind * width + x_ind]);
+    bitmap[y_ind * params.width + x_ind] = mapping(hist, params.n_blocks, bitmap[y_ind * params.width + x_ind]);
 }
 
-void polchrome(cudaStream_t stream, float2 *f_domain, uchar4 *bitmap, const int block_len, const int n_blocks, const int width, const int height)
+void polchrome(cudaStream_t stream, float2 *f_domain, uchar4 *bitmap, const ps params)
 {
 
     static short *hist_unred = nullptr;
@@ -134,29 +134,29 @@ void polchrome(cudaStream_t stream, float2 *f_domain, uchar4 *bitmap, const int 
 
     const int numThreads = 512;
     const int numBlocks = 64;
-    assert(numThreads <= block_len);
-    assert(block_len % numThreads == 0);
+    assert(numThreads <= params.block_len);
+    assert(params.block_len % numThreads == 0);
 
     const int width_unred = numThreads * numBlocks;
-    const int reduce = numThreads * numBlocks / block_len;
+    const int reduce = numThreads * numBlocks / params.block_len;
 
     if (init)
     {
         init = false;
-        CUDA_SAFE_CALL(cudaMalloc(&hist_unred, width_unred * height * sizeof(short)));
-        CUDA_SAFE_CALL(cudaMalloc(&internal_bitmap, width * height * sizeof(uchar4)));
+        CUDA_SAFE_CALL(cudaMalloc(&hist_unred, width_unred * params.height * sizeof(short)));
+        CUDA_SAFE_CALL(cudaMalloc(&internal_bitmap, params.width * params.height * sizeof(uchar4)));
         printf("init polychrome\n");
         printf("width_unred: %d\n", width_unred);
-        printf("width: %d\n", width);
+        printf("width: %d\n", params.width);
         printf("reduce: %d\n", reduce);
-        printf("height: %d\n", height);
+        printf("height: %d\n", params.height);
     }
 
-    polchrome_kernel<<<numBlocks, numThreads, 0, stream>>>(f_domain, hist_unred, block_len, n_blocks, width, height, width_unred);
+    polchrome_kernel<<<numBlocks, numThreads, 0, stream>>>(f_domain, hist_unred, params, width_unred);
     // CUDA_SAFE_CALL(cudaGetLastError());
     // CUDA_SAFE_CALL(cudaDeviceSynchronize());
-    polchrome_reduce<<<width, height, 0, stream>>>(hist_unred, internal_bitmap, width_unred, width, height, n_blocks, reduce);
+    polchrome_reduce<<<params.width, params.height, 0, stream>>>(hist_unred, internal_bitmap, params, width_unred, reduce);
     // CUDA_SAFE_CALL(cudaGetLastError());
     // CUDA_SAFE_CALL(cudaDeviceSynchronize());
-    CUDA_SAFE_CALL(cudaMemcpyAsync(bitmap, internal_bitmap, width * height * sizeof(uchar4), cudaMemcpyDeviceToDevice, stream));
+    CUDA_SAFE_CALL(cudaMemcpyAsync(bitmap, internal_bitmap, params.width * params.height * sizeof(uchar4), cudaMemcpyDeviceToDevice, stream));
 }
