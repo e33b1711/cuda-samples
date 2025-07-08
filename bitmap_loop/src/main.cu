@@ -8,6 +8,8 @@
 #include "polychrome.h"
 #include "params.h"
 
+#include "rf.h"
+
 void init(context &ctx, const ps params)
 {
     CUDA_SAFE_CALL(cudaStreamCreate(&ctx.stream));
@@ -54,7 +56,7 @@ float2 *init_host_signal(ps params)
 void handle_input(context ctx, float2 *t_domain_host, ps params)
 {
     cudaEventRecord(ctx.start, ctx.stream);
-    size_t offset_s = rand() % (params.block_len * params.n_blocks);
+    size_t offset_s = 0; //rand() % (params.block_len * params.n_blocks);
     CUDA_SAFE_CALL(cudaMemcpyAsync(ctx.t_domain, t_domain_host + offset_s, params.block_len * params.n_blocks * sizeof(float2), cudaMemcpyHostToDevice, ctx.stream));
     CUDA_SAFE_CALL(cudaMemcpyAsync(ctx.bitmap_host, ctx.bitmap, params.height * params.width * sizeof(uchar4), cudaMemcpyDeviceToHost, ctx.stream));
     cudaEventRecord(ctx.stop, ctx.stream);
@@ -107,10 +109,27 @@ void loop(context &ping, context &pong, ps params, float2 *t_domain_host)
     switch_context(ping, pong);
 }
 
+void convert_u8_to_float2(const uint8_t* in, float2* out, size_t num_samples) {
+    for (size_t i = 0; i < num_samples; ++i) {
+        // HackRF samples are unsigned 8-bit, centered at 127/128
+        float i_sample = ((float)in[2*i]   - 127.5f) / 127.5f;
+        float q_sample = ((float)in[2*i+1] - 127.5f) / 127.5f;
+        out[i] = make_float2(i_sample, q_sample);
+    }
+}
+
 int main(int argc, char **argv)
 {
 
+    uint8_t* buffer;
+    buffer = (uint8_t*) malloc(4 * 1024 * 1024 * sizeof(uint8_t));
+
+    read_hackrf_samples(buffer, 2 * 1024 * 1024 , 107990e3, 20e6);
+
+
     ps params;
+    params.block_len = 1024;
+    params.n_blocks = 1024;
     int frame = 0;
 
     context ping, pong;
@@ -120,7 +139,9 @@ int main(int argc, char **argv)
     init(pong, params);
     t_domain_host = init_host_signal(params);
 
-    while (frame < 200)
+    convert_u8_to_float2(buffer, t_domain_host, 2 * 1024 * 1024);
+
+    while (frame < 2e6)
     {
         loop(ping, pong, params, t_domain_host);
         frame++;

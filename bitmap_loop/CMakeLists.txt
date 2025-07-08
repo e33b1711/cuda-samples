@@ -11,6 +11,8 @@ find_package(OpenGL REQUIRED)
 find_package(GLUT REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(OpenCV REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(HACKRF REQUIRED libhackrf)
 
 include_directories(
     ${CUDA_INCLUDE_DIRS}
@@ -18,6 +20,7 @@ include_directories(
     ${GLUT_INCLUDE_DIR}
     ${GLEW_INCLUDE_DIRS}
     ${CAIRO_INCLUDE_DIRS}
+    ${HACKRF_INCLUDE_DIRS}
     src
 )
 
@@ -27,6 +30,7 @@ set(SOURCES
     src/fft.cu
     src/signal.cu
     src/main.cu
+    src/rf.cu
     src/polychrome.cu
 )
 
@@ -38,6 +42,7 @@ target_link_libraries(cuda_glut_bitmap
     ${GLUT_LIBRARIES}
     ${GLEW_LIBRARIES}
     ${OpenCV_LIBS}
+    ${HACKRF_LIBRARIES}
     GL
     GLU
     glut
