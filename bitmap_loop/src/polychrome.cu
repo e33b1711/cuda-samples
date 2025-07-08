@@ -71,7 +71,7 @@ __global__ void polchrome_kernel(const float2 *f_domain, short *hist_unred, cons
 
     assert(num_threads <= params.block_len);
 
-    const int height_max = 512;
+    const int height_max = 1024;
     assert(params.height <= height_max);
     short hist_column[height_max];
 
@@ -131,32 +131,31 @@ void polchrome(const context ctx, const ps params)
     static short *hist_unred = nullptr;
     static uchar4 *internal_bitmap = nullptr;
 
-    const int numThreads = 512;
-    const int numBlocks = 64;
-    assert(numThreads <= params.block_len);
-    assert(params.block_len % numThreads == 0);
+    const int num_threads = min(512, params.block_len);
+    const int num_blocks = 64;
+    assert(params.block_len % num_threads == 0);
 
-    const int width_unred = numThreads * numBlocks;
-    const int reduce = numThreads * numBlocks / params.block_len;
+    const int overal_threads = num_threads * num_blocks;
+    const int reduce = overal_threads / params.block_len;
 
     if (ctx.init)
     {
         CUDA_SAFE_CALL(cudaFree(hist_unred));
         CUDA_SAFE_CALL(cudaFree(internal_bitmap));
-        CUDA_SAFE_CALL(cudaMalloc(&hist_unred, width_unred * params.height * sizeof(short)));
+        CUDA_SAFE_CALL(cudaMalloc(&hist_unred, overal_threads * params.height * sizeof(short)));
         CUDA_SAFE_CALL(cudaMalloc(&internal_bitmap, params.width * params.height * sizeof(uchar4)));
         printf("init polychrome\n");
-        printf("width_unred: %d\n", width_unred);
+        printf("overal_threads: %d\n", overal_threads);
         printf("width: %d\n", params.width);
         printf("reduce: %d\n", reduce);
         printf("height: %d\n", params.height);
     }
 
-    polchrome_kernel<<<numBlocks, numThreads, 0, ctx.stream>>>(ctx.f_domain, hist_unred, params, width_unred);
-    // CUDA_SAFE_CALL(cudaGetLastError());
-    // CUDA_SAFE_CALL(cudaDeviceSynchronize());
-    polchrome_reduce<<<params.width, params.height, 0, ctx.stream>>>(hist_unred, internal_bitmap, params, width_unred, reduce);
-    // CUDA_SAFE_CALL(cudaGetLastError());
-    // CUDA_SAFE_CALL(cudaDeviceSynchronize());
+    polchrome_kernel<<<num_blocks, num_threads, 0, ctx.stream>>>(ctx.f_domain, hist_unred, params, overal_threads);
+    CUDA_SAFE_CALL(cudaGetLastError());
+    CUDA_SAFE_CALL(cudaDeviceSynchronize());
+    polchrome_reduce<<<params.width, params.height, 0, ctx.stream>>>(hist_unred, internal_bitmap, params, overal_threads, reduce);
+    CUDA_SAFE_CALL(cudaGetLastError());
+    CUDA_SAFE_CALL(cudaDeviceSynchronize());
     CUDA_SAFE_CALL(cudaMemcpyAsync(ctx.bitmap, internal_bitmap, params.width * params.height * sizeof(uchar4), cudaMemcpyDeviceToDevice, ctx.stream));
 }

@@ -6,6 +6,7 @@
         int width = 1024;
         int height = 512;
         float scale = 2.0;
+        int num_loops = 1e3;
     };
 
 struct context

@@ -70,7 +70,7 @@ void handle_dsp(context ctx, ps params)
     if (rand() % 1000 < 20)
     {
         size_t offset_s = rand() % params.block_len;
-        inject_spike(ctx.stream, ctx.f_domain, params.block_len, params.n_blocks, value, 34, offset_s);
+        inject_spike(ctx.stream, ctx.f_domain, params.block_len, params.n_blocks, value, 1, offset_s);
     }
     polchrome(ctx, params);
     fft_postproc(ctx, params);
@@ -96,62 +96,55 @@ void destroy(context &ctx)
     CUDA_SAFE_CALL(cudaFreeHost(ctx.bitmap_host));
 }
 
-void loop(context &ping, context &pong, ps params, float2 *t_domain_host)
+
+void one_pass(ps params)
 {
-    handle_input(ping, t_domain_host, params);
-    handle_dsp(pong, params);
-    time_info(params.block_len, params.n_blocks);
-    drawImage(pong.bitmap_host, params);
-    sync(ping);
-    sync(pong);
-    CUDA_SAFE_CALL(cudaGetLastError());
-    switch_context(ping, pong);
+
+    int frame = 0;
+    context ping, pong;
+    float2 *t_domain_host;
+
+    init(ping, params);
+    init(pong, params);
+
+    t_domain_host = init_host_signal(params);
+
+    while (frame < params.num_loops)
+    {
+        handle_input(ping, t_domain_host, params);
+        handle_dsp(pong, params);
+        time_info(params.block_len, params.n_blocks);
+        drawImage(pong.bitmap_host, params);
+        sync(ping);
+        sync(pong);
+        CUDA_SAFE_CALL(cudaGetLastError());
+        switch_context(ping, pong);
+        frame++;
+    }
+
+    // Cleanup
+    destroy(ping);
+    destroy(pong);
+    CUDA_SAFE_CALL(cudaFreeHost(t_domain_host));
 }
 
 int main(int argc, char **argv)
 {
 
     ps params;
-    int frame = 0;
-
-    context ping, pong;
-    float2 *t_domain_host;
-
-    init(ping, params);
-    init(pong, params);
-    t_domain_host = init_host_signal(params);
-
-    while (frame < 200)
-    {
-        loop(ping, pong, params, t_domain_host);
-        frame++;
-    }
-
-    // Cleanup
-    destroy(ping);
-    destroy(pong);
-    CUDA_SAFE_CALL(cudaFreeHost(t_domain_host));
-
+    params.num_loops = 300;
+    one_pass(params);
 
     params.n_blocks = 8 * 1024;
     params.block_len = 2048;
     params.width = 2048;
-    init(ping, params);
-    init(pong, params);
+    one_pass(params);
 
-    t_domain_host = init_host_signal(params);
-    frame = 0;
-
-    while (frame < 200)
-    {
-        loop(ping, pong, params, t_domain_host);
-        frame++;
-    }
-
-    // Cleanup
-    destroy(ping);
-    destroy(pong);
-    CUDA_SAFE_CALL(cudaFreeHost(t_domain_host));
+    params.n_blocks = 8 * 1024;
+    params.block_len = 256;
+    params.width = 256;
+    params.height = 1024;
+    one_pass(params);
 
     return 0;
 }
