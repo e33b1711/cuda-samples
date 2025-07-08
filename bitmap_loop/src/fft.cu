@@ -58,25 +58,26 @@ __global__ void fft_detector(const float2 *f_domain, float *f_max, float *f_min,
     f_mean[thread_idx] = mean_v / params.n_blocks;
 }
 
-__global__ void fft_detector_reduce(float *f_max, float *f_min, float *f_mean, const ps params, const int n_threads)
+__global__ void fft_detector_reduce(float *f_max, float *f_min, float *f_mean, const ps params, const int overall_threads)
 {
-    assert(gridDim.x == 1);
-    assert(blockDim.x == params.block_len);
+    assert(blockDim.x * gridDim.x == params.block_len);
+
+    const int overal_thread_id = threadIdx.x + blockIdx.x * blockDim.x;
 
     float max_v = -1e99f;
     float min_v = 1e99f;
     float mean_v = 0.0f;
 
-    for (int i = threadIdx.x; i < n_threads; i += params.block_len)
+    for (int i = overal_thread_id; i < overall_threads; i += params.block_len)
     {
         max_v = max(max_v, f_max[i]);
         min_v = min(min_v, f_min[i]);
         mean_v += f_mean[i];
     }
 
-    f_max[threadIdx.x] = max_v;
-    f_min[threadIdx.x] = min_v;
-    f_mean[threadIdx.x] = mean_v;
+    f_max[overal_thread_id] = max_v;
+    f_min[overal_thread_id] = min_v;
+    f_mean[overal_thread_id] = mean_v;
 }
 
 __device__ float db_abs(float d_signal)
@@ -129,20 +130,23 @@ void fft_postproc(const context ctx, const ps params)
     static float *f_min = nullptr;
     static float *f_mean = nullptr;
 
-    const int numThreads = 512;
-    const int numBlocks = 64;
-    assert(numThreads < params.block_len);
+    const int num_threads = min(512, params.block_len);
+    const int num_blocks = 64;
+    const int overal_threads = num_threads * num_blocks;
 
     if (ctx.init)
     {
-        CUDA_SAFE_CALL(cudaMalloc(&f_max, numThreads * numBlocks * sizeof(float)));
-        CUDA_SAFE_CALL(cudaMalloc(&f_min, numThreads * numBlocks * sizeof(float)));
-        CUDA_SAFE_CALL(cudaMalloc(&f_mean, numThreads * numBlocks * sizeof(float)));
+        CUDA_SAFE_CALL(cudaMalloc(&f_max, overal_threads * sizeof(float)));
+        CUDA_SAFE_CALL(cudaMalloc(&f_min, overal_threads * sizeof(float)));
+        CUDA_SAFE_CALL(cudaMalloc(&f_mean, overal_threads * sizeof(float)));
     }
 
-    fft_detector<<<numBlocks, numThreads, 0, ctx.stream>>>(ctx.f_domain, f_max, f_min, f_mean, params);
+    fft_detector<<<num_blocks, num_threads, 0, ctx.stream>>>(ctx.f_domain, f_max, f_min, f_mean, params);
 
-    fft_detector_reduce<<<1, params.block_len, 0, ctx.stream>>>(f_max, f_min, f_mean, params, numThreads * numBlocks);
+    const int num_threads_red = min(512, params.block_len);
+    const int num_blocks_red = params.block_len / num_threads_red;
+
+    fft_detector_reduce<<<num_blocks_red, num_threads_red, 0, ctx.stream>>>(f_max, f_min, f_mean, params, overal_threads);
 
     dim3 block(16, 16);
     dim3 grid((params.width + block.x - 1) / block.x, (params.height + block.y - 1) / block.y);

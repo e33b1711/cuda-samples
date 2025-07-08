@@ -104,6 +104,7 @@ void loop(context &ping, context &pong, ps params, float2 *t_domain_host)
     drawImage(pong.bitmap_host, params);
     sync(ping);
     sync(pong);
+    CUDA_SAFE_CALL(cudaGetLastError());
     switch_context(ping, pong);
 }
 
