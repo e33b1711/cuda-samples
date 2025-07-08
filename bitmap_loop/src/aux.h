@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-void time_info(const int block_len, const int n_blocks);
+float time_info(const int block_len, const int n_blocks);
 
 #define CUDA_SAFE_CALL(call)                                                                           \
     do                                                                                                 \

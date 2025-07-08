@@ -2,7 +2,7 @@
 #include <chrono>
 #include <unistd.h>
 
-void time_info(const int block_len, const int n_blocks)
+float time_info(const int block_len, const int n_blocks)
 {
     using clock = std::chrono::high_resolution_clock;
     static auto last_time = clock::now();
@@ -10,14 +10,17 @@ void time_info(const int block_len, const int n_blocks)
     static int frames;
     auto now = clock::now();
     std::chrono::duration<double> elapsed = now - last_time;
+    static float tp = INFINITY;
     if (elapsed.count() >= 1.0)
     {
+        tp = float(frame_count) * float(block_len) * float(n_blocks) / 1e6f;
         printf("FPS: %d\n", frame_count);
-        printf("Max rate: %f MHz\n", float(frame_count) * float(block_len) * float(n_blocks) / 1e6f);
+        printf("Max rate: %f MHz\n",  tp);
         printf("Frames: %d\n", frames);
         frame_count = 0;
         last_time = now;
     }
     frame_count++;
     frames++;
+    return tp;
 }

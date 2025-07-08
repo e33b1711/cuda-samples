@@ -97,10 +97,11 @@ void destroy(context &ctx)
 }
 
 
-void one_pass(ps params)
+float one_pass(ps params)
 {
 
     int frame = 0;
+    float throughput;
     context ping, pong;
     float2 *t_domain_host;
 
@@ -113,7 +114,7 @@ void one_pass(ps params)
     {
         handle_input(ping, t_domain_host, params);
         handle_dsp(pong, params);
-        time_info(params.block_len, params.n_blocks);
+        throughput = time_info(params.block_len, params.n_blocks);
         drawImage(pong.bitmap_host, params);
         sync(ping);
         sync(pong);
@@ -126,25 +127,32 @@ void one_pass(ps params)
     destroy(ping);
     destroy(pong);
     CUDA_SAFE_CALL(cudaFreeHost(t_domain_host));
+    return throughput;
 }
 
 int main(int argc, char **argv)
 {
 
+    float throughput[10];
+
     ps params;
     params.num_loops = 300;
-    one_pass(params);
+    throughput[0] = one_pass(params);
 
     params.n_blocks = 8 * 1024;
     params.block_len = 2048;
     params.width = 2048;
-    one_pass(params);
+    throughput[1] =one_pass(params);
 
     params.n_blocks = 8 * 1024;
     params.block_len = 256;
     params.width = 256;
     params.height = 1024;
-    one_pass(params);
+    throughput[2] = one_pass(params);
+
+    for(int i=0; i<3; i++){
+        printf("throughput: %f\n", throughput[i]);
+    }
 
     return 0;
 }
