@@ -55,8 +55,12 @@ __device__ float db_abs(float2 fd)
 __device__ void line_interp(int &y_max, int &y_min, const float2 *d_signal, const int x, const ps params)
 {
     float abs_x_mid = db_abs(d_signal[x]);
-    float abs_x_left = (x > 0) ? db_abs(d_signal[x - 1]) : abs_x_mid;
-    float abs_x_right = (x < params.width - 1) ? db_abs(d_signal[x + 1]) : abs_x_mid;
+    float abs_x_left = abs_x_mid;
+    float abs_x_right = abs_x_mid;
+    if ((x % params.width) != 0)
+        abs_x_left = db_abs(d_signal[x - 1]);
+    if (((x + 1) % params.width) != 0)
+        abs_x_right = db_abs(d_signal[x + 1]);
     int y_mid = int(params.scale * abs_x_mid + params.height / 2);
     int left_y = int(0.5 * params.scale * (abs_x_left + abs_x_mid) + params.height / 2);
     int right_y = int(0.5 * params.scale * (abs_x_right + abs_x_mid) + params.height / 2);
@@ -97,12 +101,13 @@ __global__ void polchrome_kernel(const float2 *f_domain, short *hist_unred, cons
             hist_column[y_min]++;
 
         if (y_max + 1 < params.height)
-            hist_column[y_max + 1]--; 
+            hist_column[y_max + 1]--;
     }
 
     // integrate
     short accu = 0;
-    for (int y_ind = 0; y_ind < params.height; y_ind++){
+    for (int y_ind = 0; y_ind < params.height; y_ind++)
+    {
         accu += hist_column[y_ind];
         hist_unred[y_ind + thread_idx * params.height] = accu;
     }
