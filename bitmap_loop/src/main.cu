@@ -7,6 +7,8 @@
 #include "signal.h"
 #include "polychrome.h"
 #include "params.h"
+#include "udp_source.h"
+
 
 void init(context &ctx, const ps params)
 {
@@ -55,8 +57,9 @@ void handle_input(context ctx, float2 *t_domain_host, ps params)
 {
     cudaEventRecord(ctx.start, ctx.stream);
     size_t offset_s = rand() % (params.block_len * params.n_blocks);
-    CUDA_SAFE_CALL(cudaMemcpyAsync(ctx.t_domain, t_domain_host + offset_s, params.block_len * params.n_blocks * sizeof(float2), cudaMemcpyHostToDevice, ctx.stream));
+    CUDA_SAFE_CALL(cudaMemcpyAsync(ctx.t_domain, t_domain_host, params.block_len * params.n_blocks * sizeof(float2), cudaMemcpyHostToDevice, ctx.stream));
     CUDA_SAFE_CALL(cudaMemcpyAsync(ctx.bitmap_host, ctx.bitmap, params.height * params.width * sizeof(uchar4), cudaMemcpyDeviceToHost, ctx.stream));
+    CUDA_SAFE_CALL(cudaGetLastError());
     cudaEventRecord(ctx.stop, ctx.stream);
 }
 
@@ -67,7 +70,7 @@ void handle_dsp(context ctx, ps params)
     float2 value;
     value.x = float(rand() % 1000) / 0.01;
     value.y = float(rand() % 1000) / 0.01;
-    if (rand() % 1000 < 20)
+    if (rand() % 1000 < 0)
     {
         size_t offset_s = rand() % params.block_len;
         inject_spike(ctx.stream, ctx.f_domain, params.block_len, params.n_blocks, value, 1, offset_s);
@@ -108,10 +111,11 @@ float one_pass(ps params)
     init(ping, params);
     init(pong, params);
 
-    t_domain_host = init_host_signal(params);
+    //t_domain_host = init_host_signal(params);
 
     while (frame < params.num_loops)
     {
+        t_domain_host = process_next_buffer();
         handle_input(ping, t_domain_host, params);
         handle_dsp(pong, params);
         throughput = time_info(params.block_len, params.n_blocks);
@@ -132,27 +136,31 @@ float one_pass(ps params)
 
 int main(int argc, char **argv)
 {
+    udp_init();
 
     float throughput[10];
 
     ps params;
-    params.num_loops = 300;
+    params.n_blocks = 256;
+    params.num_loops = 1000000;
     throughput[0] = one_pass(params);
 
-    params.n_blocks = 8 * 1024;
-    params.block_len = 2048;
-    params.width = 2048;
-    throughput[1] =one_pass(params);
-
-    params.n_blocks = 8 * 1024;
-    params.block_len = 256;
-    params.width = 256;
-    params.height = 1024;
-    throughput[2] = one_pass(params);
+    //params.n_blocks = 8 * 1024;
+    //params.block_len = 2048;
+    //params.width = 2048;
+    //throughput[1] =one_pass(params);
+//
+    //params.n_blocks = 8 * 1024;
+    //params.block_len = 256;
+    //params.width = 256;
+    //params.height = 1024;
+    //throughput[2] = one_pass(params);
 
     for(int i=0; i<3; i++){
         printf("throughput: %f\n", throughput[i]);
     }
+
+    udp_close();
 
     return 0;
 }

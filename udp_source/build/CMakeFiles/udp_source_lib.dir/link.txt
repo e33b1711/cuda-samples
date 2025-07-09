@@ -1,0 +1,2 @@
+/usr/bin/ar qc libudp_source_lib.a CMakeFiles/udp_source_lib.dir/src/udp_source.cu.o
+/usr/bin/ranlib libudp_source_lib.a

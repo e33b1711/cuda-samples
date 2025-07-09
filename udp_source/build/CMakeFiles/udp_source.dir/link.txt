@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/udp_source.dir/src/main.cpp.o -o udp_source   -L/usr/local/cuda-12.9/targets/x86_64-linux/lib/stubs  -L/usr/local/cuda-12.9/targets/x86_64-linux/lib  libudp_source_lib.a -lpthread -lcudadevrt -lcudart_static -lrt -lpthread -ldl 
