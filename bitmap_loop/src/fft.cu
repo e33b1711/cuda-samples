@@ -16,20 +16,39 @@ __device__ cufftComplex fft_load_callback(void *dataIn, size_t offset, void *cal
     cufftComplex out;
     int fft_batch_index = offset / p->block_len;
     size_t adj_offset = offset - fft_batch_index * (p->block_len / 2); // Example: 50% overlap
-    out.x = input[adj_offset].x;
-    out.y = input[adj_offset].y;
+    out.x = input[adj_offset].y;
+    out.y = input[adj_offset].x;
     return out;
 }
 __device__ cufftCallbackLoadC d_loadCallbackPtr = fft_load_callback;
 
-// Pass device pointer to params as callerInfo
-void setup_fft_load_callback(cufftHandle plan, const ps *d_params)
+// Device store callback for FFT shift
+__device__ void fft_store_shift_callback(void *dataOut, size_t offset, cufftComplex element, void *callerInfo, void *sharedPtr)
 {
+    const ps *p = (const ps *)callerInfo;
+    cufftComplex *output = (cufftComplex *)dataOut;
+    int N = p->block_len;
+    int shift = N / 2;
+    int shifted_idx = (offset + shift) % N;
+    output[shifted_idx] = element;
+}
+__device__ cufftCallbackStoreC d_storeShiftCallbackPtr = fft_store_shift_callback;
+
+// Combined host function to register both load and store callbacks
+void setup_fft_callbacks(cufftHandle plan, const ps *d_params)
+{
+    // Load callback
     cufftCallbackLoadC h_load_callback;
     CUDA_SAFE_CALL(cudaMemcpyFromSymbol(&h_load_callback, d_loadCallbackPtr, sizeof(h_load_callback)));
     void *callerInfoHost[1];
     callerInfoHost[0] = (void *)d_params; // device pointer to params
     cufftResult result = cufftXtSetCallback(plan, (void **)&h_load_callback, CUFFT_CB_LD_COMPLEX, callerInfoHost);
+    assert(result == CUFFT_SUCCESS);
+
+    // Store callback
+    cufftCallbackStoreC h_store_callback;
+    CUDA_SAFE_CALL(cudaMemcpyFromSymbol(&h_store_callback, d_storeShiftCallbackPtr, sizeof(h_store_callback)));
+    result = cufftXtSetCallback(plan, (void **)&h_store_callback, CUFFT_CB_ST_COMPLEX, callerInfoHost);
     assert(result == CUFFT_SUCCESS);
 }
 
@@ -47,12 +66,12 @@ void run_fft(const context ctx, const ps params)
         assert(result == CUFFT_SUCCESS);
         cufftSetStream(plan, ctx.stream); // Associate the plan with the given stream
 
-        // Allocate/copy params to device and register callback
+        // Allocate/copy params to device and register callbacks
         if (!d_params) {
             CUDA_SAFE_CALL(cudaMalloc(&d_params, sizeof(ps)));
         }
         CUDA_SAFE_CALL(cudaMemcpy(d_params, &params, sizeof(ps), cudaMemcpyHostToDevice));
-        setup_fft_load_callback(plan, d_params);    // Register the load callback with params
+        setup_fft_callbacks(plan, d_params);    // Register the load and store callbacks with params
     } else {
         // Update device params if needed
         CUDA_SAFE_CALL(cudaMemcpy(d_params, &params, sizeof(ps), cudaMemcpyHostToDevice));
