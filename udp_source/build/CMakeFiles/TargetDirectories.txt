@@ -1,4 +1,0 @@
-/home/e33b1711/scratch/cuda-samples/udp_source/build/CMakeFiles/udp_source_lib.dir
-/home/e33b1711/scratch/cuda-samples/udp_source/build/CMakeFiles/udp_source.dir
-/home/e33b1711/scratch/cuda-samples/udp_source/build/CMakeFiles/edit_cache.dir
-/home/e33b1711/scratch/cuda-samples/udp_source/build/CMakeFiles/rebuild_cache.dir
