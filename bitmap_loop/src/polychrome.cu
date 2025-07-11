@@ -157,10 +157,10 @@ void polchrome(const context ctx, const ps params)
     }
 
     polchrome_kernel<<<num_blocks, num_threads, 0, ctx.stream>>>(ctx.f_domain, hist_unred, params, overal_threads);
-    CUDA_SAFE_CALL(cudaGetLastError());
-    CUDA_SAFE_CALL(cudaDeviceSynchronize());
+    //CUDA_SAFE_CALL(cudaGetLastError());
+    //CUDA_SAFE_CALL(cudaDeviceSynchronize());
     polchrome_reduce<<<params.width, params.height, 0, ctx.stream>>>(hist_unred, internal_bitmap, params, overal_threads, reduce);
-    CUDA_SAFE_CALL(cudaGetLastError());
-    CUDA_SAFE_CALL(cudaDeviceSynchronize());
+    //CUDA_SAFE_CALL(cudaGetLastError());
+    //CUDA_SAFE_CALL(cudaDeviceSynchronize());
     CUDA_SAFE_CALL(cudaMemcpyAsync(ctx.bitmap, internal_bitmap, params.width * params.height * sizeof(uchar4), cudaMemcpyDeviceToDevice, ctx.stream));
 }

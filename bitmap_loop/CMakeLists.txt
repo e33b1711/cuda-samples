@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CUDA_STANDARD 14)
 
 set(CMAKE_CUDA_ARCHITECTURES 52 60 61 70 75 80 86)
+set(CUDA_SEPARABLE_COMPILATION ON)
 
 find_package(CUDA REQUIRED)
 find_package(OpenGL REQUIRED)
@@ -40,11 +41,8 @@ target_link_libraries(cuda_glut_bitmap
     ${GLEW_LIBRARIES}
     ${OpenCV_LIBS}
     GL
-    GLU
-    glut
-    cuda
-    cudart
-    cufft
+    cufft_static
+    culibos
 )
 
 set_target_properties(cuda_glut_bitmap PROPERTIES

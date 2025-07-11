@@ -3,9 +3,33 @@
 #include <stdio.h>
 #include <assert.h>
 #include <cufft.h>
+#include <cufftXt.h>
 
 #include "aux.h"
 #include "params.h"
+
+
+
+__device__ cufftComplex fft_load_callback(void *dataIn, size_t offset, void *callerInfo, void *sharedPtr)
+{
+    float2 *input = (float2 *)dataIn;
+    cufftComplex out;
+    int fft_batch_index = offset / 1024;
+    size_t adj_offset = offset - fft_batch_index * 512;
+    out.x = input[adj_offset].x;
+    out.y = input[adj_offset].y;
+    return out;
+}
+__device__ cufftCallbackLoadC d_loadCallbackPtr = fft_load_callback;
+
+
+void setup_fft_load_callback(cufftHandle plan)
+{
+    cufftCallbackLoadC h_load_callback;
+    CUDA_SAFE_CALL(cudaMemcpyFromSymbol(&h_load_callback, d_loadCallbackPtr, sizeof(h_load_callback)));
+    cufftResult result = cufftXtSetCallback(plan, (void **)&h_load_callback, CUFFT_CB_LD_COMPLEX, nullptr);
+    assert(result == CUFFT_SUCCESS);
+}
 
 void run_fft(const context ctx, const ps params)
 {
@@ -19,8 +43,8 @@ void run_fft(const context ctx, const ps params)
         result = cufftPlan1d(&plan, params.block_len, CUFFT_C2C, params.n_blocks);
         assert(result == CUFFT_SUCCESS);
         cufftSetStream(plan, ctx.stream); // Associate the plan with the given stream
+        setup_fft_load_callback(plan);    // Register the load callback
     }
-
     // Execute FFT (forward transform)
     result = cufftExecC2C(plan, (cufftComplex *)ctx.t_domain, (cufftComplex *)ctx.f_domain, CUFFT_FORWARD);
     assert(result == CUFFT_SUCCESS);

@@ -16,7 +16,7 @@ void init(context &ctx, const ps params)
     CUDA_SAFE_CALL(cudaHostAlloc((void **)&ctx.bitmap_host, params.height * params.width * sizeof(uchar4), cudaHostAllocDefault));
     CUDA_SAFE_CALL(cudaMalloc(&ctx.bitmap, params.height * params.width * sizeof(uchar4)));
     CUDA_SAFE_CALL(cudaMalloc(&ctx.t_domain, params.block_len * params.n_blocks * sizeof(float2)));
-    CUDA_SAFE_CALL(cudaMalloc(&ctx.f_domain, params.block_len * params.n_blocks * sizeof(float2)));
+    CUDA_SAFE_CALL(cudaMalloc(&ctx.f_domain, 2 * params.block_len * params.n_blocks * sizeof(float2)));
     CUDA_SAFE_CALL(cudaEventCreate(&ctx.start));
     CUDA_SAFE_CALL(cudaEventCreate(&ctx.stop));
     ctx.init = true;
