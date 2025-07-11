@@ -86,7 +86,7 @@ __global__ void polchrome_kernel(const float2 *f_domain, short *hist_unred, cons
 
     assert(width_unred > thread_idx);
 
-    for (int t_idx = thread_idx; t_idx < params.block_len * params.n_blocks; t_idx += width_unred)
+    for (int t_idx = thread_idx; t_idx < params.block_len * params.n_f_blocks; t_idx += width_unred)
     {
 
         int y_min, y_max;
@@ -127,7 +127,7 @@ __global__ void polchrome_reduce(short *hist_unred, uchar4 *bitmap, const ps par
     {
         hist += hist_unred[y_ind + x_ind * params.height + red * params.width * params.height];
     }
-    bitmap[y_ind * params.width + x_ind] = mapping(hist, params.n_blocks, bitmap[y_ind * params.width + x_ind]);
+    bitmap[y_ind * params.width + x_ind] = mapping(hist, params.n_f_blocks, bitmap[y_ind * params.width + x_ind]);
 }
 
 void polchrome(const context ctx, const ps params)

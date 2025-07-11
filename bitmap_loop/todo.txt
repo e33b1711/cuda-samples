@@ -1,4 +1,3 @@
-( ) more streams
 ( ) fft window
 ( ) fft overlap
 ( ) transient signal / modulated signal

@@ -2,7 +2,9 @@
 
     struct ps{
         int block_len = 1024;
-        int n_blocks = 1024 * 16;
+        int overlap_len = 512;
+        int n_t_blocks = 1024 * 16;
+        int n_f_blocks = 2 * 1024 * 16 -1;
         int width = 1024;
         int height = 512;
         float scale = 2.0;
@@ -22,3 +24,5 @@ struct context
     //
     bool init = true;
 };
+
+//todo depended params

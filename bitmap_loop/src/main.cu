@@ -15,8 +15,8 @@ void init(context &ctx, const ps params)
     CUDA_SAFE_CALL(cudaStreamCreate(&ctx.stream));
     CUDA_SAFE_CALL(cudaHostAlloc((void **)&ctx.bitmap_host, params.height * params.width * sizeof(uchar4), cudaHostAllocDefault));
     CUDA_SAFE_CALL(cudaMalloc(&ctx.bitmap, params.height * params.width * sizeof(uchar4)));
-    CUDA_SAFE_CALL(cudaMalloc(&ctx.t_domain, params.block_len * params.n_blocks * sizeof(float2)));
-    CUDA_SAFE_CALL(cudaMalloc(&ctx.f_domain, 2 * params.block_len * params.n_blocks * sizeof(float2)));
+    CUDA_SAFE_CALL(cudaMalloc(&ctx.t_domain, params.block_len * params.n_t_blocks * sizeof(float2)));
+    CUDA_SAFE_CALL(cudaMalloc(&ctx.f_domain, params.block_len * params.n_f_blocks * sizeof(float2)));
     CUDA_SAFE_CALL(cudaEventCreate(&ctx.start));
     CUDA_SAFE_CALL(cudaEventCreate(&ctx.stop));
     ctx.init = true;
@@ -43,12 +43,12 @@ void switch_context(context &ping, context &pong)
 float2 *init_host_signal(ps params)
 {
     float2 *t_domain_host = nullptr;
-    CUDA_SAFE_CALL(cudaHostAlloc((void **)&t_domain_host, 2 * params.block_len * params.n_blocks * sizeof(float2), cudaHostAllocMapped));
+    CUDA_SAFE_CALL(cudaHostAlloc((void **)&t_domain_host, 2 * params.block_len * params.n_t_blocks * sizeof(float2), cudaHostAllocMapped));
 
     float2 *t_domain = nullptr;
-    CUDA_SAFE_CALL(cudaMalloc(&t_domain, 2 * params.block_len * params.n_blocks * sizeof(float2)));
-    generate_signal(t_domain, 2 * params.block_len * params.n_blocks);
-    CUDA_SAFE_CALL(cudaMemcpy(t_domain_host, t_domain, 2 * params.block_len * params.n_blocks * sizeof(float2), cudaMemcpyDeviceToHost));
+    CUDA_SAFE_CALL(cudaMalloc(&t_domain, 2 * params.block_len * params.n_t_blocks * sizeof(float2)));
+    generate_signal(t_domain, 2 * params.block_len * params.n_t_blocks);
+    CUDA_SAFE_CALL(cudaMemcpy(t_domain_host, t_domain, 2 * params.block_len * params.n_t_blocks * sizeof(float2), cudaMemcpyDeviceToHost));
     CUDA_SAFE_CALL(cudaFree(t_domain));
     return t_domain_host;
 }
@@ -56,8 +56,8 @@ float2 *init_host_signal(ps params)
 void handle_input(context ctx, float2 *t_domain_host, ps params)
 {
     cudaEventRecord(ctx.start, ctx.stream);
-    size_t offset_s = rand() % (params.block_len * params.n_blocks);
-    CUDA_SAFE_CALL(cudaMemcpyAsync(ctx.t_domain, t_domain_host, params.block_len * params.n_blocks * sizeof(float2), cudaMemcpyHostToDevice, ctx.stream));
+    size_t offset_s = rand() % (params.block_len * params.n_t_blocks);
+    CUDA_SAFE_CALL(cudaMemcpyAsync(ctx.t_domain, t_domain_host, params.block_len * params.n_t_blocks * sizeof(float2), cudaMemcpyHostToDevice, ctx.stream));
     CUDA_SAFE_CALL(cudaMemcpyAsync(ctx.bitmap_host, ctx.bitmap, params.height * params.width * sizeof(uchar4), cudaMemcpyDeviceToHost, ctx.stream));
     CUDA_SAFE_CALL(cudaGetLastError());
     cudaEventRecord(ctx.stop, ctx.stream);
@@ -73,7 +73,7 @@ void handle_dsp(context ctx, ps params)
     if (rand() % 1000 < 0)
     {
         size_t offset_s = rand() % params.block_len;
-        inject_spike(ctx.stream, ctx.f_domain, params.block_len, params.n_blocks, value, 1, offset_s);
+        inject_spike(ctx.stream, ctx.f_domain, params.block_len, params.n_f_blocks, value, 1, offset_s);
     }
     polchrome(ctx, params);
     fft_postproc(ctx, params);
@@ -108,7 +108,7 @@ float one_pass(ps params)
     context ping, pong;
     float2 *t_domain_host = nullptr;
 
-    UdpSource udp(params.block_len * params.n_blocks);
+    UdpSource udp(params.block_len * params.n_t_blocks);
     udp.init();
 
     init(ping, params);
@@ -119,7 +119,7 @@ float one_pass(ps params)
         t_domain_host = udp.process_next_buffer();
         handle_input(ping, t_domain_host, params);
         handle_dsp(pong, params);
-        throughput = time_info(params.block_len, params.n_blocks);
+        throughput = time_info(params.block_len, params.n_t_blocks);
         drawImage(pong.bitmap_host, params);
         sync(ping);
         sync(pong);
@@ -141,7 +141,8 @@ int main(int argc, char **argv)
     float throughput[10];
 
     ps params;
-    params.n_blocks = 256;
+    params.n_t_blocks = 256;
+    params.n_f_blocks = 256*2-1;
     params.num_loops = 500;
     throughput[0] = one_pass(params);
 

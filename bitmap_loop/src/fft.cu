@@ -8,43 +8,56 @@
 #include "aux.h"
 #include "params.h"
 
-
-
+// Device callback: now uses params from callerInfo
 __device__ cufftComplex fft_load_callback(void *dataIn, size_t offset, void *callerInfo, void *sharedPtr)
 {
     float2 *input = (float2 *)dataIn;
+    const ps *p = (const ps *)callerInfo; // ps is your params struct
     cufftComplex out;
-    int fft_batch_index = offset / 1024;
-    size_t adj_offset = offset - fft_batch_index * 512;
+    int fft_batch_index = offset / p->block_len;
+    size_t adj_offset = offset - fft_batch_index * (p->block_len / 2); // Example: 50% overlap
     out.x = input[adj_offset].x;
     out.y = input[adj_offset].y;
     return out;
 }
 __device__ cufftCallbackLoadC d_loadCallbackPtr = fft_load_callback;
 
-
-void setup_fft_load_callback(cufftHandle plan)
+// Pass device pointer to params as callerInfo
+void setup_fft_load_callback(cufftHandle plan, const ps *d_params)
 {
     cufftCallbackLoadC h_load_callback;
     CUDA_SAFE_CALL(cudaMemcpyFromSymbol(&h_load_callback, d_loadCallbackPtr, sizeof(h_load_callback)));
-    cufftResult result = cufftXtSetCallback(plan, (void **)&h_load_callback, CUFFT_CB_LD_COMPLEX, nullptr);
+    void *callerInfoHost[1];
+    callerInfoHost[0] = (void *)d_params; // device pointer to params
+    cufftResult result = cufftXtSetCallback(plan, (void **)&h_load_callback, CUFFT_CB_LD_COMPLEX, callerInfoHost);
     assert(result == CUFFT_SUCCESS);
 }
 
 void run_fft(const context ctx, const ps params)
 {
     static cufftHandle plan;
+    static ps *d_params = nullptr;
     cufftResult result;
 
     // Create a 1D FFT plan for complex-to-complex (single precision)
     if (ctx.init)
     {
         printf("Init fft.\n");
-        result = cufftPlan1d(&plan, params.block_len, CUFFT_C2C, params.n_blocks);
+        result = cufftPlan1d(&plan, params.block_len, CUFFT_C2C, params.n_f_blocks);
         assert(result == CUFFT_SUCCESS);
         cufftSetStream(plan, ctx.stream); // Associate the plan with the given stream
-        setup_fft_load_callback(plan);    // Register the load callback
+
+        // Allocate/copy params to device and register callback
+        if (!d_params) {
+            CUDA_SAFE_CALL(cudaMalloc(&d_params, sizeof(ps)));
+        }
+        CUDA_SAFE_CALL(cudaMemcpy(d_params, &params, sizeof(ps), cudaMemcpyHostToDevice));
+        setup_fft_load_callback(plan, d_params);    // Register the load callback with params
+    } else {
+        // Update device params if needed
+        CUDA_SAFE_CALL(cudaMemcpy(d_params, &params, sizeof(ps), cudaMemcpyHostToDevice));
     }
+
     // Execute FFT (forward transform)
     result = cufftExecC2C(plan, (cufftComplex *)ctx.t_domain, (cufftComplex *)ctx.f_domain, CUFFT_FORWARD);
     assert(result == CUFFT_SUCCESS);
@@ -66,7 +79,7 @@ __global__ void fft_detector(const float2 *f_domain, float *f_max, float *f_min,
     float mean_v = 0.0f;
 
     int t_idx = thread_idx;
-    while (t_idx < params.block_len * params.n_blocks)
+    while (t_idx < params.block_len * params.n_f_blocks)
     {
         float2 fd = f_domain[t_idx];
         float abs_v = sqrtf(fd.x * fd.x + fd.y * fd.y);
@@ -79,7 +92,7 @@ __global__ void fft_detector(const float2 *f_domain, float *f_max, float *f_min,
 
     f_max[thread_idx] = max_v;
     f_min[thread_idx] = min_v;
-    f_mean[thread_idx] = mean_v / params.n_blocks;
+    f_mean[thread_idx] = mean_v / params.n_f_blocks;
 }
 
 __global__ void fft_detector_reduce(float *f_max, float *f_min, float *f_mean, const ps params, const int overall_threads)
